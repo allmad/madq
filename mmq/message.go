@@ -33,7 +33,7 @@ type Message struct {
 	Crc     uint32
 	Version int16
 
-	MsgId int64
+	MsgId uint64
 	Data  []byte
 }
 
@@ -79,6 +79,11 @@ func parseMsgV1(m *Message, buf *bytes.Buffer) error {
 		return ErrInvalidMessage.Format("read msgid")
 	}
 	return nil
+}
+
+func (m *Message) SetMsgId(id uint64) {
+	m.MsgId = id
+	binary.LittleEndian.PutUint64(m.Data[offset:offset+8], m.MsgId)
 }
 
 func (m *Message) WriteTo(w io.Writer) (err error) {
