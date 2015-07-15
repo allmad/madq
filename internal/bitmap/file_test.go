@@ -37,11 +37,11 @@ func TestFile(t *testing.T) {
 	}
 
 	{
-		n, err := f.WriteAt(buf2[:5], ChunkSize+11)
+		n, err := f.WriteAt(buf2[:5], int64(f.chunkSize)+11)
 		if err != nil {
 			t.Fatal(err)
 		}
-		nRead, err := f.ReadAt(buf, ChunkSize+11)
+		nRead, err := f.ReadAt(buf, int64(f.chunkSize)+11)
 		if err != nil && !logex.Is(err, io.EOF) {
 			t.Fatal(err)
 		}
@@ -50,7 +50,7 @@ func TestFile(t *testing.T) {
 		}
 	}
 
-	if f.Size() != ChunkSize+11+5 {
+	if f.Size() != int64(f.chunkSize)+11+5 {
 		t.Fatal("size not expect")
 	}
 }

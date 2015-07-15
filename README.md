@@ -9,4 +9,4 @@ mmq is design to use in IM, follows pub/sub model, to achieve serve by millions 
 * distributed and decentralized topologies without single points of failure
 * the number of topic can be unlimit(depends on hardware)
 * every messages must accepted ack before mark done, auto requeue if message process timeout
-* high scalability
+* provide a horizontally scalable solution

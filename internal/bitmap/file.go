@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	CacheSize = 8
-	ChunkBit  = 30
-	ChunkSize = 1 << ChunkBit
+	CacheSize        = 8
+	DefaultChunkBit  = 30
+	DefaultChunkSize = 1 << DefaultChunkBit
 )
 
 type fileCtx struct {
@@ -33,25 +33,33 @@ func (f *fileCtx) Release() {
 	}
 }
 
-// File abstract that there is a unlimit-sized file
+// File introduce that there is a large bitmap as a file
 type File struct {
-	base  string
-	cache [CacheSize]*fileCtx
+	base      string
+	cache     [CacheSize]*fileCtx
+	chunkBit  uint
+	chunkSize uint
 	sync.RWMutex
 }
 
 func NewFile(path string) (*File, error) {
+	return NewFileEx(path, DefaultChunkBit)
+}
+
+func NewFileEx(path string, chunkBit uint) (*File, error) {
 	err := os.MkdirAll(path, 0711)
 	if err != nil {
 		return nil, logex.Trace(err)
 	}
 	return &File{
-		base: path + "/",
+		base:      path + "/",
+		chunkBit:  chunkBit,
+		chunkSize: 1 << chunkBit,
 	}, nil
 }
 
 func (f *File) getFile(offset int64) (*fileCtx, error) {
-	idx := offset >> ChunkBit
+	idx := offset >> f.chunkBit
 	name := strconv.FormatInt(idx, 36)
 	cacheIdx := idx % CacheSize
 
@@ -89,13 +97,13 @@ func (f *File) WriteAt(buf []byte, at int64) (n int, err error) {
 	}
 	defer fctx.Release()
 
-	chunkOffset := at - ((at >> ChunkBit) << ChunkBit)
-	sizeLeft := ChunkSize - chunkOffset
+	chunkOffset := at - ((at >> f.chunkBit) << f.chunkBit)
+	sizeLeft := int64(f.chunkSize) - chunkOffset
 	if sizeLeft > int64(len(buf)) {
 		return fctx.WriteAt(buf, chunkOffset)
 	}
 
-	n, err = fctx.WriteAt(buf[:sizeLeft], at>>ChunkBit)
+	n, err = fctx.WriteAt(buf[:sizeLeft], at>>f.chunkBit)
 	if err != nil {
 		return n, logex.Trace(err)
 	}
@@ -110,8 +118,8 @@ func (f *File) ReadAt(buf []byte, at int64) (n int, err error) {
 	}
 	defer fctx.Release()
 
-	chunkOffset := at - ((at >> ChunkBit) << ChunkBit)
-	sizeLeft := ChunkSize - chunkOffset
+	chunkOffset := at - ((at >> f.chunkBit) << f.chunkBit)
+	sizeLeft := int64(f.chunkSize) - chunkOffset
 
 	n, err = fctx.ReadAt(buf, chunkOffset)
 	if err != nil {
@@ -177,5 +185,5 @@ func (f *File) Size() int64 {
 		return 0
 	}
 
-	return chunkIdx<<ChunkBit + info.Size()
+	return chunkIdx<<f.chunkBit + info.Size()
 }
