@@ -28,7 +28,7 @@ func TestFile(t *testing.T) {
 
 	buf := make([]byte, 1024)
 	nRead, err := f.ReadAt(buf, 1024)
-	if err != nil && !logex.Is(err, io.EOF) {
+	if err != nil && !logex.Equal(err, io.EOF) {
 		logex.Error(err)
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestFile(t *testing.T) {
 			t.Fatal(err)
 		}
 		nRead, err := f.ReadAt(buf, int64(f.chunkSize)+11)
-		if err != nil && !logex.Is(err, io.EOF) {
+		if err != nil && !logex.Equal(err, io.EOF) {
 			t.Fatal(err)
 		}
 		if !bytes.Equal(buf[:nRead], buf2[:n]) {

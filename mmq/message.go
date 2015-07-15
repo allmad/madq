@@ -3,68 +3,84 @@ package mmq
 import (
 	"bytes"
 	"encoding/binary"
+	"hash/crc32"
 	"io"
 	"math"
-
-	"github.com/chzyer/mmq/internal/utils"
-
-	"hash/crc32"
 
 	"gopkg.in/logex.v1"
 )
 
-var (
+const (
+	MagicByte byte = 0x9a
+
+	MsgIdOffset    = 10
 	MessageMaxSize = math.MaxUint16
 )
 
+var (
+	ErrMagicNotMatch  = logex.Define("magic byte not match")
+	ErrInvalidMessage = logex.Define("invalid message: %v")
+)
+
+// in binary(magic always is 0x9a):
+// +-------+--------+-----+---------+-------+------+
+// | magic | length | crc | version | msgid | data |
+// +-------+--------+-----+---------+-------+------+
+// | 1     | 4      | 4   | 1       | 8     | ...  |
+// +-------+--------+-----+---------+-------+------+
 type Message struct {
-	Version int16
 	Length  int32
-	MsgId   uint16
 	Crc     uint32
-	Data    []byte
-	buffer  bytes.Buffer
+	Version int16
+
+	MsgId int64
+	Data  []byte
 }
 
-func (m *Message) getCrc() uint32 {
-	if m.Crc == 0 {
-		n := crc32.NewIEEE()
-		n.Write(m.Data)
-		m.Crc = n.Sum32()
+func NewMessage(data []byte) (*Message, error) {
+	buf := bytes.NewBuffer(data)
+	magic, err := buf.ReadByte()
+	if err != nil {
+		return nil, logex.Trace(err, "magic")
 	}
-	return m.Crc
-}
-
-func NewMessage(r io.Reader) (m *Message, err error) {
-	var version int16
-	if err := binary.Read(w, binary.LittleEndian, &version); err != nil {
-		return logex.Trace(err)
+	if magic != MagicByte {
+		return nil, ErrMagicNotMatch
 	}
-	switch version {
+	m := new(Message)
+	if err = binary.Read(buf, binary.LittleEndian, &m.Length); err != nil {
+		return nil, ErrInvalidMessage.Format("read length").Follow(err)
+	}
+	if err = binary.Read(buf, binary.LittleEndian, &m.Crc); err != nil {
+		return nil, ErrInvalidMessage.Format("read crc").Follow(err)
+	}
+	h := crc32.NewIEEE()
+	h.Write(buf.Bytes())
+	if m.Crc != h.Sum32() {
+		return nil, ErrInvalidMessage.Format("crc not match")
+	}
+	if err = binary.Read(buf, binary.LittleEndian, &m.Version); err != nil {
+		return nil, ErrInvalidMessage.Format("read version")
+	}
+	switch m.Version {
 	case 1:
-		return NewMessageV1(r), nil
+		err = parseMsgV1(m, buf)
+	default:
+		err = ErrInvalidMessage.Format("unsupport version")
 	}
-	return nil, nil
+	if err != nil {
+		return nil, logex.Trace(err)
+	}
+
+	return m, nil
 }
 
-func NewMessageV1(r io.Reader) (m *Message, err error) {
-	m = &Message{
-		Version: 1,
-		buffer:  bytes.NewBuffer(make([]byte, 0, 512)),
+func parseMsgV1(m *Message, buf *bytes.Buffer) error {
+	if err := binary.Read(buf, binary.LittleEndian, &m.MsgId); err != nil {
+		return ErrInvalidMessage.Format("read msgid")
 	}
-	buffer := io.TeeReader(r, m.buffer)
-	if err := binary.Read(buffer, binary.LittleEndian, &m.Length); err != nil {
-		return logex.Trace(err, "length")
-	}
-
-	return
+	return nil
 }
 
 func (m *Message) WriteTo(w io.Writer) (err error) {
-	return logex.Trace(utils.BinaryWriteMulti(w, []interface{}{
-		m.Version,
-		m.Length,
-		m.getCrc(),
-		m.Data,
-	}))
+	return nil
 }

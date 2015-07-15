@@ -11,18 +11,6 @@ import (
 	"github.com/chzyer/mmq/mmq"
 )
 
-func Init(c *Config) {
-	config = c
-}
-
-var (
-	config = &Config{
-		Root:            "/data/mmq",
-		IndexName:       ".index",
-		BackendChunkBit: 26,
-	}
-)
-
 type Config struct {
 	Root            string
 	IndexName       string
@@ -34,21 +22,23 @@ func (c *Config) Path(name string) string {
 }
 
 type Instance struct {
-	Name string
-	index
+	config *Config
+	Name   string
+	index  int
 	file   *bitmap.File
 	writer io.Writer
 }
 
-func New(name string) (t *Instance, err error) {
+func New(name string, config *Config) (t *Instance, err error) {
 	t = &Instance{
-		Name: name,
+		config: config,
+		Name:   name,
 	}
-	t.file, err = bitmap.NewFile(config.Path(t.TopicPath()), config.BackendChunkBit)
+	t.file, err = bitmap.NewFileEx(config.Path(t.TopicPath()), config.BackendChunkBit)
 	if err != nil {
 		return nil, logex.Trace(err)
 	}
-	t.writer = utils.Reader{t.file, 0}
+	t.writer = &utils.Writer{t.file, 0}
 	return t, nil
 }
 
