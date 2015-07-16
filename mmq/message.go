@@ -13,13 +13,15 @@ import (
 const (
 	MagicByte byte = 0x9a
 
-	MsgIdOffset    = 10
-	MessageMaxSize = math.MaxUint16
+	MsgIdOffset           = 10
+	MessageMaxSize        = math.MaxUint16
+	MessageMaxContentSzie = MessageMaxSize - 18
 )
 
 var (
-	ErrMagicNotMatch  = logex.Define("magic byte not match")
-	ErrInvalidMessage = logex.Define("invalid message: %v")
+	ErrMagicNotMatch   = logex.Define("magic byte not match")
+	ErrInvalidMessage  = logex.Define("invalid message: %v")
+	ErrMessageTooLarge = logex.Define("message size exceed limit")
 )
 
 // in binary(magic always is 0x9a):
@@ -33,8 +35,9 @@ type Message struct {
 	Crc     uint32
 	Version int16
 
-	MsgId uint64
-	Data  []byte
+	MsgId    uint64
+	Data     []byte
+	underlay []byte
 }
 
 func NewMessage(data []byte) (*Message, error) {
@@ -83,9 +86,10 @@ func parseMsgV1(m *Message, buf *bytes.Buffer) error {
 
 func (m *Message) SetMsgId(id uint64) {
 	m.MsgId = id
-	binary.LittleEndian.PutUint64(m.Data[offset:offset+8], m.MsgId)
+	buf := m.Data[MsgIdOffset : MsgIdOffset+8]
+	binary.LittleEndian.PutUint64(buf, m.MsgId)
 }
 
-func (m *Message) WriteTo(w io.Writer) (err error) {
-	return nil
+func (m *Message) WriteTo(w io.Writer) (int, error) {
+	return w.Write(m.underlay)
 }
