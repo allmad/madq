@@ -7,6 +7,8 @@ import (
 
 	"gopkg.in/logex.v1"
 
+	"time"
+
 	"github.com/chzyer/mmq/internal/bitmap"
 	"github.com/chzyer/mmq/internal/utils"
 	"github.com/chzyer/mmq/mmq"
@@ -40,6 +42,8 @@ type Instance struct {
 	// linked list for Waiters
 	waiterList *list.List
 	newMsgChan chan struct{}
+	putChan    chan *putArgs
+	getChan    chan *getArgs
 }
 
 func New(name string, config *Config) (t *Instance, err error) {
@@ -47,6 +51,7 @@ func New(name string, config *Config) (t *Instance, err error) {
 		config:     config,
 		Name:       name,
 		newMsgChan: make(chan struct{}, 1),
+		putChan:    make(chan *putArgs, 1<<3),
 	}
 	path := config.Path(t.TopicPath())
 	t.file, err = bitmap.NewFileEx(path, config.ChunkBit)
@@ -55,6 +60,7 @@ func New(name string, config *Config) (t *Instance, err error) {
 	}
 	// TODO: must read some metafile to determine the offset
 	t.writer = &utils.Writer{t.file, 0}
+	go t.ioLoop()
 	return t, nil
 }
 
@@ -62,21 +68,88 @@ func (t *Instance) TopicPath() string {
 	return utils.PathEncode(t.Name)
 }
 
-func (t *Instance) Put(m *mmq.Message) error {
-	_, err := m.WriteTo(t.writer)
+func (t *Instance) notifyNewMsg() {
 	select {
 	case t.newMsgChan <- struct{}{}:
 	default:
 	}
-	return logex.Trace(err)
 }
 
-func (t *Instance) get(offset int64, size int, msgChan chan<- []*mmq.Message) ([]*mmq.Message, error) {
-	if size > MaxBenchSize {
-		return nil, ErrBenchSizeTooLarge.Trace()
+func (t *Instance) ioLoop() {
+	var (
+		put *putArgs
+		get *getArgs
+		ok  bool
+
+		timer = time.NewTimer(0)
+	)
+	for {
+		select {
+		case put, ok = <-t.putChan:
+			if !ok {
+				goto exit
+			}
+			t.put(put, timer)
+		case get, ok = <-t.getChan:
+			if !ok {
+				goto exit
+			}
+			t.getAsync(get, timer)
+		}
+	}
+exit:
+}
+
+type putArgs struct {
+	msgs  []*mmq.Message
+	reply chan<- []error
+}
+
+func (t *Instance) Put(msgs []*mmq.Message, reply chan []error) {
+	t.putChan <- &putArgs{msgs, reply}
+}
+
+func (t *Instance) put(arg *putArgs, timer *time.Timer) {
+	errs := make([]error, len(arg.msgs))
+	for i := 0; i < len(arg.msgs); i++ {
+		_, errs[i] = arg.msgs[i].WriteTo(t.writer)
+	}
+	t.notifyNewMsg()
+	timer.Reset(time.Second)
+	select {
+	case arg.reply <- errs:
+	case <-timer.C:
+		logex.Error("write reply timeout")
+	}
+}
+
+type getArgs struct {
+	offset int64
+	size   int
+	reply  chan<- []*mmq.Message
+	err    chan<- error
+}
+
+func (t *Instance) Get(offset int64, size int, reply chan<- []*mmq.Message, err chan<- error) {
+	t.getChan <- &getArgs{offset, size, reply, err}
+}
+
+func (t *Instance) getAsync(arg *getArgs, timer *time.Timer) {
+	err := t.get(arg)
+	timer.Reset(time.Second)
+	select {
+	case arg.err <- err:
+	case <-timer.C:
+		logex.Error("reply to get timeout")
+	}
+}
+
+func (t *Instance) get(arg *getArgs) error {
+	if arg.size > MaxBenchSize {
+		return ErrBenchSizeTooLarge.Trace()
 	}
 
-	msgs := make([]*mmq.Message, size)
+	msgs := make([]*mmq.Message, arg.size)
 	var (
 		msg *mmq.Message
 		err error
@@ -85,20 +158,23 @@ func (t *Instance) get(offset int64, size int, msgChan chan<- []*mmq.Message) ([
 	var header mmq.HeaderBin
 
 	// check offset
-	r := &utils.Reader{t.file, offset}
+	r := &utils.Reader{t.file, arg.offset}
 	p := 0
-	for i := 0; i < size; i++ {
+	for i := 0; i < arg.size; i++ {
 		msg, err = mmq.ReadMessage(&header, r, mmq.RF_RESEEK_ON_FAULT)
 		if logex.Equal(err, io.ErrUnexpectedEOF) || logex.Equal(err, io.EOF) {
 			// use chan, to subscribe
 			break
 		}
 		if err != nil {
-			return msgs[:p], logex.Trace(err)
+			break
 		}
 		msgs[p] = msg
 		p++
 	}
 
-	return msgs[:p], nil
+	select {
+	case arg.reply <- msgs[:p]:
+	}
+	return logex.Trace(err)
 }
