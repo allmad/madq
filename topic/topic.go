@@ -52,6 +52,7 @@ func New(name string, config *Config) (t *Instance, err error) {
 		Name:       name,
 		newMsgChan: make(chan struct{}, 1),
 		putChan:    make(chan *putArgs, 1<<3),
+		getChan:    make(chan *getArgs, 1<<3),
 	}
 	path := config.Path(t.TopicPath())
 	t.file, err = bitmap.NewFileEx(path, config.ChunkBit)
