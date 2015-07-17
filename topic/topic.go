@@ -82,11 +82,13 @@ func (t *Instance) get(offset int64, size int, msgChan chan<- []*mmq.Message) ([
 		err error
 	)
 
+	var header mmq.HeaderBin
+
 	// check offset
 	r := &utils.Reader{t.file, offset}
 	p := 0
 	for i := 0; i < size; i++ {
-		msg, err = mmq.ReadMessage(r, mmq.F_ALLOW_FAULT)
+		msg, err = mmq.ReadMessage(&header, r, mmq.RF_RESEEK_ON_FAULT)
 		if logex.Equal(err, io.ErrUnexpectedEOF) || logex.Equal(err, io.EOF) {
 			// use chan, to subscribe
 			break
