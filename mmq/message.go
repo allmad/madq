@@ -13,14 +13,19 @@ import (
 const (
 	MagicByte byte = 0x9a
 
-	MsgIdOffset           = 10
-	MessageMaxSize        = math.MaxUint16
+	MsgIdOffset    = 10
+	MessageMaxSize = math.MaxUint32
+
+	MessageMagicSize      = 1
+	MessageLengthSize     = 4
+	MessageHeaderSize     = MessageMagicSize + MessageLengthSize
 	MessageMaxContentSzie = MessageMaxSize - 18
 )
 
 var (
 	ErrMagicNotMatch   = logex.Define("magic byte not match")
 	ErrInvalidMessage  = logex.Define("invalid message: %v")
+	ErrInvalidHeader   = logex.Define("invalid message header: %v")
 	ErrMessageTooLarge = logex.Define("message size exceed limit")
 )
 
@@ -31,31 +36,72 @@ var (
 // | 1     | 4      | 4   | 1       | 8     | ...  |
 // +-------+--------+-----+---------+-------+------+
 type Message struct {
-	Length  int32
+	Length  uint32
 	Crc     uint32
-	Version int16
+	Version uint8
 
 	MsgId    uint64
 	Data     []byte
 	underlay []byte
 }
 
-func NewMessage(data []byte) (*Message, error) {
-	buf := bytes.NewBuffer(data)
-	magic, err := buf.ReadByte()
+type ReadFlag int
+
+const (
+	F_DEFAULT     ReadFlag = 0
+	F_ALLOW_FAULT          = 1
+)
+
+func ReadMessage(r io.Reader, flag ReadFlag) (*Message, error) {
+	header := make([]byte, MessageHeaderSize)
+	_, err := io.ReadFull(r, header)
 	if err != nil {
-		return nil, logex.Trace(err, "magic")
+		return nil, logex.Trace(err)
 	}
+
+	var length uint32
+	if err := ReadMessageHeader(header, &length); err != nil {
+		if logex.Equal(err, ErrMagicNotMatch) && flag == F_ALLOW_FAULT {
+			// retry
+		}
+		return nil, logex.Trace(err)
+	}
+
+	content := make([]byte, MessageHeaderSize+int(length))
+	if _, err = io.ReadFull(r, content[5:]); err != nil {
+		return nil, logex.Trace(err)
+	}
+	copy(content, header)
+	m, err := NewMessage(content)
+	return m, logex.Trace(err)
+}
+
+func ReadMessageHeader(buf []byte, length *uint32) (err error) {
+	if len(buf) < MessageHeaderSize {
+		return ErrInvalidHeader.Format("short length")
+	}
+	magic := buf[0]
 	if magic != MagicByte {
-		return nil, ErrMagicNotMatch
+		return ErrMagicNotMatch.Trace()
 	}
-	m := new(Message)
-	if err = binary.Read(buf, binary.LittleEndian, &m.Length); err != nil {
-		return nil, ErrInvalidMessage.Format("read length").Follow(err)
+
+	*length = binary.LittleEndian.Uint32(buf[1:5])
+	return nil
+}
+
+func NewMessage(data []byte) (m *Message, err error) {
+	if len(data) < MessageHeaderSize+4 { // 1 + 4 + 4
+		return nil, ErrInvalidHeader.Format("short length")
 	}
-	if err = binary.Read(buf, binary.LittleEndian, &m.Crc); err != nil {
-		return nil, ErrInvalidMessage.Format("read crc").Follow(err)
+
+	m = new(Message)
+	if err := ReadMessageHeader(data[:5], &m.Length); err != nil {
+		return nil, logex.Trace(err)
 	}
+	m.Crc = binary.LittleEndian.Uint32(data[5:9])
+
+	buf := bytes.NewBuffer(data[9:])
+
 	h := crc32.NewIEEE()
 	h.Write(buf.Bytes())
 	if m.Crc != h.Sum32() {

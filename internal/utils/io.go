@@ -1,6 +1,14 @@
 package utils
 
-import "io"
+import (
+	"io"
+
+	"gopkg.in/logex.v1"
+)
+
+var (
+	ErrSeekNotSupport = logex.Define("seek with whence(2) is not supported")
+)
 
 type Reader struct {
 	io.ReaderAt
@@ -13,6 +21,18 @@ func (r *Reader) Read(val []byte) (n int, err error) {
 	return
 }
 
+func (r *Reader) Seek(offset int64, whence int) (ret int64, err error) {
+	switch whence {
+	case 0:
+		r.Offset = offset
+	case 1:
+		r.Offset += offset
+	case 2:
+		return 0, ErrSeekNotSupport.Trace()
+	}
+	return r.Offset, nil
+}
+
 type Writer struct {
 	io.WriterAt
 	Offset int64
@@ -22,4 +42,16 @@ func (w *Writer) Write(buf []byte) (n int, err error) {
 	n, err = w.WriteAt(buf, w.Offset)
 	w.Offset += int64(n)
 	return
+}
+
+func (w *Writer) Seek(offset int64, whence int) (int64, error) {
+	switch whence {
+	case 0:
+		w.Offset = offset
+	case 1:
+		w.Offset += offset
+	case 2:
+		return 0, ErrSeekNotSupport.Trace()
+	}
+	return w.Offset, nil
 }

@@ -1,6 +1,7 @@
 package bitmap
 
 import (
+	"io"
 	"os"
 	"sort"
 	"strconv"
@@ -122,16 +123,19 @@ func (f *File) ReadAt(buf []byte, at int64) (n int, err error) {
 	sizeLeft := int64(f.chunkSize) - chunkOffset
 
 	n, err = fctx.ReadAt(buf, chunkOffset)
-	if err != nil {
+	if sizeLeft > int64(len(buf)) {
 		return n, logex.Trace(err, chunkOffset)
 	}
-	if sizeLeft > int64(len(buf)) {
-		return n, nil
+	if logex.Equal(err, io.EOF) {
+		err = nil
+	}
+	if err != nil {
+		return n, logex.Trace(err, chunkOffset)
 	}
 
 	nNew, err := f.ReadAt(buf[n:], at+int64(n))
 	n += nNew
-	return n, logex.Trace(err)
+	return n, logex.Trace(err, at+int64(n))
 }
 
 func (f *File) Close() {
