@@ -7,6 +7,7 @@ import (
 
 	"gopkg.in/logex.v1"
 
+	"github.com/chzyer/mmq/internal/utils"
 	"github.com/chzyer/mmq/mmq"
 )
 
@@ -27,6 +28,7 @@ func BenchmarkTopicPut(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	msg := mmq.NewMessageByData([]byte(utils.RandString(256)))
 	reply := make(chan []error)
 	var wg sync.WaitGroup
 	go func() {
