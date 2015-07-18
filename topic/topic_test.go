@@ -55,11 +55,9 @@ func TestTopic(t *testing.T) {
 		}
 	}()
 	go func() {
-		putReply := make(chan []error)
 		for _, m := range testSource {
 			msg := mmq.NewMessageByData(m)
-			topic.Put([]*mmq.Message{msg}, putReply)
-			errs := <-putReply
+			errs := topic.PutSync([]*mmq.Message{msg})
 			logex.Error(errs)
 		}
 	}()

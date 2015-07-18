@@ -10,9 +10,25 @@ var (
 	ErrSeekNotSupport = logex.Define("seek with whence(2) is not supported")
 )
 
+type BufReaderAt struct {
+	buf []byte
+}
+
+func (r *BufReaderAt) ReadAt(p []byte, off int64) (n int, err error) {
+	n = copy(p, r.buf[int(off):])
+	if int(off)+n >= len(r.buf) {
+		err = io.EOF
+	}
+	return n, err
+}
+
 type Reader struct {
 	io.ReaderAt
 	Offset int64
+}
+
+func NewReaderBuf(b []byte) *Reader {
+	return &Reader{&BufReaderAt{b}, 0}
 }
 
 func (r *Reader) Read(val []byte) (n int, err error) {

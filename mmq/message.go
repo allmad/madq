@@ -26,12 +26,15 @@ var (
 	ErrMagicNotMatch    = logex.Define("magic byte not match")
 	ErrInvalidMessage   = logex.Define("invalid message: %v")
 	ErrInvalidHeader    = logex.Define("invalid message header: %v")
+	ErrInvalidLength    = logex.Define("invalid message: length short")
 	ErrChecksumNotMatch = logex.Define("message checksum not match")
 	ErrMessageTooLarge  = logex.Define("message size exceed limit")
 	ErrReadFlagInvalid  = logex.Define("set ReadFlag to RF_RESEEK_ON_FAULT required r is *utils.Reader")
 	ErrReseekReachLimit = logex.Define("reseek reach size limit")
 
-	ErrReseekable = []error{ErrMagicNotMatch, ErrChecksumNotMatch}
+	ErrReseekable = []error{
+		ErrMagicNotMatch, ErrChecksumNotMatch, ErrInvalidLength,
+	}
 )
 
 type HeaderBin [SizeMsgHeader]byte
@@ -60,6 +63,7 @@ const (
 	OffsetMsgBody     = SizeMsgHeader
 
 	MaxReseekBytes = math.MaxUint16 << 4
+	MinMsgLength   = SizeMsgId + SizeMsgCrc + SizeMsgVer
 )
 
 var (
@@ -110,7 +114,7 @@ func NewMessageByData(data []byte) *Message {
 }
 
 func ReadMessage(reuseBuf *HeaderBin, reader io.Reader, rf ReadFlag) (*Message, error) {
-	msg, err := readMessage(reuseBuf, reader)
+	n, msg, err := readMessage(reuseBuf, reader)
 	if rf != RF_RESEEK_ON_FAULT || !logex.EqualAny(err, ErrReseekable) {
 		return msg, logex.Trace(err)
 	}
@@ -121,6 +125,7 @@ func ReadMessage(reuseBuf *HeaderBin, reader io.Reader, rf ReadFlag) (*Message, 
 	if !ok {
 		panic(ErrReadFlagInvalid)
 	}
+	r.Offset -= int64(n)
 	offset := r.Offset
 	logex.Errorf("begin to reseek, offset: (%v), why: (%v)", offset, err)
 
@@ -139,46 +144,52 @@ func ReadMessage(reuseBuf *HeaderBin, reader io.Reader, rf ReadFlag) (*Message, 
 
 		offset = offset + skiped - 1
 		r.Offset = offset
-		msg, err = readMessage(reuseBuf, r)
+		n, msg, err = readMessage(reuseBuf, r)
 		if !logex.EqualAny(err, ErrReseekable) {
 			return msg, logex.Trace(err)
 		}
-
+		r.Offset -= int64(n)
+		buf = bufio.NewReader(r)
 		continue
 	}
 	return nil, ErrReseekReachLimit.Trace()
 }
 
-func readMessage(reuseBuf *HeaderBin, r io.Reader) (*Message, error) {
+func readMessage(reuseBuf *HeaderBin, r io.Reader) (int, *Message, error) {
 	header := reuseBuf[:]
-	_, err := io.ReadFull(r, header)
+	n, err := io.ReadFull(r, header)
+	nRead := n
 	if err != nil {
-		return nil, logex.Trace(err)
+		return n, nil, logex.Trace(err)
 	}
 
 	var length uint32
 	if err := ReadMessageHeader(header, &length); err != nil {
-		return nil, logex.Trace(err)
+		return n, nil, logex.Trace(err)
 	}
 
 	content := make([]byte, SizeMsgHeader+int(length))
-	if _, err = io.ReadFull(r, content[SizeMsgHeader:]); err != nil {
-		return nil, logex.Trace(err)
+	if n, err = io.ReadFull(r, content[SizeMsgHeader:]); err != nil {
+		return nRead + n, nil, logex.Trace(err)
 	}
 	copy(content, header)
 	m, err := NewMessage(content)
-	return m, logex.Trace(err)
+	return nRead + n, m, logex.Trace(err)
 }
 
-func ReadMessageHeader(buf []byte, length *uint32) (err error) {
+func ReadMessageHeader(buf []byte, lengthRef *uint32) (err error) {
 	if len(buf) < SizeMsgHeader {
-		return ErrInvalidHeader.Format("short length")
+		return ErrInvalidLength.Trace(len(buf))
 	}
 	if buf[0] != MagicByte || buf[1] != MagicByteV2 {
 		return ErrMagicNotMatch.Trace(buf[:SizeMsgMagic])
 	}
 
-	*length = binary.LittleEndian.Uint32(buf[SizeMsgMagic:])
+	length := binary.LittleEndian.Uint32(buf[SizeMsgMagic:])
+	if length < MinMsgLength {
+		return ErrInvalidLength.Trace(length)
+	}
+	*lengthRef = length
 	return nil
 }
 
@@ -187,7 +198,9 @@ func NewMessage(data []byte) (m *Message, err error) {
 		return nil, ErrInvalidHeader.Format("short length")
 	}
 
-	m = new(Message)
+	m = &Message{
+		underlay: data,
+	}
 	if err := ReadMessageHeader(data[:SizeMsgHeader], &m.Length); err != nil {
 		return nil, logex.Trace(err)
 	}
