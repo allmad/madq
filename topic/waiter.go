@@ -2,11 +2,6 @@ package topic
 
 import "github.com/chzyer/mmq/mmq"
 
-type Group struct {
-	Name   string
-	Offset int
-}
-
 // a client has multiple waiters
 //
 // once client want to get messages which are not prepared,
@@ -14,10 +9,16 @@ type Group struct {
 // and wait for messages via stream untils got all it want,
 // and then topic will remove waiter from its waiter list.
 type Waiter struct {
-	// list all topic it subscribe
-	reply chan<- []*mmq.Message
+	oriOff  int64
+	offset  int64
+	size    int
+	oriSize int
+	reply   chan<- []*mmq.Message
 }
 
-func NewWaiter() *Waiter {
-	return nil
+func (w *Waiter) toGetArg(err chan<- error) *getArgs {
+	return &getArgs{
+		w.offset, w.size, w.reply, err,
+		w.oriOff, w.oriSize,
+	}
 }

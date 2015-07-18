@@ -20,11 +20,14 @@ const (
 
 var (
 	ErrBenchSizeTooLarge = logex.Define("bench size is too large")
+	ErrNeedAddToWaiter   = []error{
+		io.ErrUnexpectedEOF, io.EOF,
+	}
 )
 
 type Config struct {
 	Root      string
-	IndexName string
+	IndexName string // ??
 	ChunkBit  uint
 }
 
@@ -33,14 +36,15 @@ func (c *Config) Path(name string) string {
 }
 
 type Instance struct {
-	config *Config
 	Name   string
+	config *Config
 	index  int
 	file   *bitmap.File
 	writer *utils.Writer
 
 	// linked list for Waiters
 	waiterList *list.List
+
 	newMsgChan chan struct{}
 	putChan    chan *putArgs
 	getChan    chan *getArgs
@@ -50,11 +54,12 @@ func New(name string, config *Config) (t *Instance, err error) {
 	t = &Instance{
 		config:     config,
 		Name:       name,
+		waiterList: list.New(),
 		newMsgChan: make(chan struct{}, 1),
 		putChan:    make(chan *putArgs, 1<<3),
 		getChan:    make(chan *getArgs, 1<<3),
 	}
-	path := config.Path(t.TopicPath())
+	path := config.Path(t.nameEncoded())
 	t.file, err = bitmap.NewFileEx(path, config.ChunkBit)
 	if err != nil {
 		return nil, logex.Trace(err)
@@ -65,15 +70,8 @@ func New(name string, config *Config) (t *Instance, err error) {
 	return t, nil
 }
 
-func (t *Instance) TopicPath() string {
+func (t *Instance) nameEncoded() string {
 	return utils.PathEncode(t.Name)
-}
-
-func (t *Instance) notifyNewMsg() {
-	select {
-	case t.newMsgChan <- struct{}{}:
-	default:
-	}
 }
 
 func (t *Instance) ioLoop() {
@@ -87,23 +85,43 @@ func (t *Instance) ioLoop() {
 	for {
 		select {
 		case put, ok = <-t.putChan:
-			if !ok {
-				goto exit
-			}
-			t.put(put, timer)
+			logex.Info("loop put:", put)
+			goto put
 		case get, ok = <-t.getChan:
-			if !ok {
-				goto exit
-			}
-			t.getAsync(get, timer)
+			logex.Info("loop get:", get)
+			goto get
 		}
+		if !ok {
+			break
+		}
+
+	put:
+		if !ok {
+			break
+		}
+		t.put(put, timer)
+		t.checkWaiter()
+		continue
+
+	get:
+		if !ok {
+			break
+		}
+
+		t.getAsync(get, timer)
+		continue
 	}
-exit:
 }
 
 type putArgs struct {
 	msgs  []*mmq.Message
 	reply chan<- []error
+}
+
+func (t *Instance) PutSync(msgs []*mmq.Message) []error {
+	reply := make(chan []error)
+	t.Put(msgs, reply)
+	return <-reply
 }
 
 func (t *Instance) Put(msgs []*mmq.Message, reply chan []error) {
@@ -113,15 +131,11 @@ func (t *Instance) Put(msgs []*mmq.Message, reply chan []error) {
 func (t *Instance) put(arg *putArgs, timer *time.Timer) {
 	errs := make([]error, len(arg.msgs))
 	for i := 0; i < len(arg.msgs); i++ {
+		arg.msgs[i].SetMsgId(uint64(t.writer.Offset))
 		_, errs[i] = arg.msgs[i].WriteTo(t.writer)
 	}
-	t.notifyNewMsg()
 	timer.Reset(time.Second)
-	select {
-	case arg.reply <- errs:
-	case <-timer.C:
-		logex.Error("write reply timeout")
-	}
+	arg.reply <- errs
 }
 
 type getArgs struct {
@@ -129,10 +143,23 @@ type getArgs struct {
 	size   int
 	reply  chan<- []*mmq.Message
 	err    chan<- error
+
+	// context
+	oriOff  int64
+	oriSize int
+}
+
+func (t *Instance) GetSync(offset int64, size int, reply chan<- []*mmq.Message) error {
+	errReply := make(chan error)
+	t.Get(offset, size, reply, errReply)
+	return <-errReply
 }
 
 func (t *Instance) Get(offset int64, size int, reply chan<- []*mmq.Message, err chan<- error) {
-	t.getChan <- &getArgs{offset, size, reply, err}
+	t.getChan <- &getArgs{
+		offset, size, reply, err,
+		offset, size,
+	}
 }
 
 func (t *Instance) getAsync(arg *getArgs, timer *time.Timer) {
@@ -163,8 +190,10 @@ func (t *Instance) get(arg *getArgs) error {
 	p := 0
 	for i := 0; i < arg.size; i++ {
 		msg, err = mmq.ReadMessage(&header, r, mmq.RF_RESEEK_ON_FAULT)
-		if logex.Equal(err, io.ErrUnexpectedEOF) || logex.Equal(err, io.EOF) {
-			// use chan, to subscribe
+		err = logex.Trace(err, i)
+		if logex.EqualAny(err, ErrNeedAddToWaiter) {
+			// not finish, add to waiterList
+			t.addWaiter(arg, r.Offset, p)
 			break
 		}
 		if err != nil {
@@ -177,5 +206,52 @@ func (t *Instance) get(arg *getArgs) error {
 	select {
 	case arg.reply <- msgs[:p]:
 	}
-	return logex.Trace(err)
+	return err
+}
+
+func (t *Instance) addToWaiterList(w *Waiter) {
+	if t.waiterList.Len() == 0 {
+		t.waiterList.PushFront(w)
+		return
+	}
+
+	for obj := t.waiterList.Front(); obj != nil; obj = obj.Next() {
+		if w.offset <= obj.Value.(*Waiter).offset {
+			t.waiterList.InsertBefore(w, obj)
+			return
+		}
+		if obj.Next() == nil {
+			t.waiterList.PushBack(w)
+			return
+		}
+	}
+}
+
+func (t *Instance) addWaiter(arg *getArgs, offset int64, size int) {
+	w := &Waiter{
+		offset: offset,
+		size:   arg.size,
+		reply:  arg.reply,
+
+		oriOff:  arg.oriOff,
+		oriSize: arg.oriSize,
+	}
+	t.addToWaiterList(w)
+}
+
+func (t *Instance) checkWaiter() {
+	offset := t.writer.Offset
+	var err error
+	for item := t.waiterList.Front(); item != nil; item = item.Next() {
+		waiter := item.Value.(*Waiter)
+		if waiter.offset > offset {
+			break
+		}
+
+		t.waiterList.Remove(item)
+		err = t.get(waiter.toGetArg(nil))
+		if err != nil {
+			logex.Error(err)
+		}
+	}
 }
