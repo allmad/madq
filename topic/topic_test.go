@@ -22,6 +22,32 @@ func init() {
 	os.RemoveAll(c.Root)
 }
 
+func BenchmarkTopicPut(b *testing.B) {
+	topic, err := New("bench-put", c)
+	if err != nil {
+		b.Fatal(err)
+	}
+	reply := make(chan []error)
+	var wg sync.WaitGroup
+	go func() {
+		for _ = range reply {
+			wg.Done()
+		}
+	}()
+	b.ResetTimer()
+	buffer := []*mmq.Message{}
+	for i := 0; i < b.N; i++ {
+		m, _ := mmq.NewMessage(msg.Bytes(), true)
+		buffer = append(buffer, m)
+		if len(buffer) >= 100 {
+			wg.Add(1)
+			topic.Put(buffer, reply)
+			buffer = nil
+		}
+	}
+	wg.Wait()
+}
+
 func TestTopic(t *testing.T) {
 	topic, err := New("topicTest", c)
 	if err != nil {

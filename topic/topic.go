@@ -85,10 +85,8 @@ func (t *Instance) ioLoop() {
 	for {
 		select {
 		case put, ok = <-t.putChan:
-			logex.Info("loop put:", put)
 			goto put
 		case get, ok = <-t.getChan:
-			logex.Info("loop get:", get)
 			goto get
 		}
 		if !ok {

@@ -10,9 +10,25 @@ import (
 	"gopkg.in/logex.v1"
 )
 
+func BenchmarkNewMessageByData(b *testing.B) {
+	source := []byte(utils.RandString(256))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		NewMessageByData(source)
+	}
+}
+
+func BenchmarkNewMessageRaw256(b *testing.B) {
+	m := NewMessageByData([]byte(utils.RandString(256)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		NewMessage(m.underlay, false)
+	}
+}
+
 func TestMessage(t *testing.T) {
 	m := NewMessageByData([]byte("hello"))
-	m2, err := NewMessage(m.underlay)
+	m2, err := NewMessage(m.underlay, true)
 	if err != nil {
 		t.Error(err)
 	}

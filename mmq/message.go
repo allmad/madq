@@ -2,7 +2,6 @@ package mmq
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"hash/crc32"
@@ -114,12 +113,12 @@ func NewMessageByData(data []byte) *Message {
 }
 
 func ReadMessage(reuseBuf *HeaderBin, reader io.Reader, rf ReadFlag) (*Message, error) {
-	n, msg, err := readMessage(reuseBuf, reader)
+	checksum := true
+	n, msg, err := readMessage(reuseBuf, reader, checksum)
 	if rf != RF_RESEEK_ON_FAULT || !logex.EqualAny(err, ErrReseekable) {
 		return msg, logex.Trace(err)
 	}
 
-	// TODO: reseek must backto the offset of magicByte
 	// reseekable and allow reseek on fault
 	r, ok := reader.(*utils.Reader)
 	if !ok {
@@ -144,7 +143,7 @@ func ReadMessage(reuseBuf *HeaderBin, reader io.Reader, rf ReadFlag) (*Message, 
 
 		offset = offset + skiped - 1
 		r.Offset = offset
-		n, msg, err = readMessage(reuseBuf, r)
+		n, msg, err = readMessage(reuseBuf, r, checksum)
 		if !logex.EqualAny(err, ErrReseekable) {
 			return msg, logex.Trace(err)
 		}
@@ -155,7 +154,7 @@ func ReadMessage(reuseBuf *HeaderBin, reader io.Reader, rf ReadFlag) (*Message, 
 	return nil, ErrReseekReachLimit.Trace()
 }
 
-func readMessage(reuseBuf *HeaderBin, r io.Reader) (int, *Message, error) {
+func readMessage(reuseBuf *HeaderBin, r io.Reader, checksum bool) (int, *Message, error) {
 	header := reuseBuf[:]
 	n, err := io.ReadFull(r, header)
 	nRead := n
@@ -173,7 +172,7 @@ func readMessage(reuseBuf *HeaderBin, r io.Reader) (int, *Message, error) {
 		return nRead + n, nil, logex.Trace(err)
 	}
 	copy(content, header)
-	m, err := NewMessage(content)
+	m, err := NewMessage(content, checksum)
 	return nRead + n, m, logex.Trace(err)
 }
 
@@ -193,7 +192,7 @@ func ReadMessageHeader(buf []byte, lengthRef *uint32) (err error) {
 	return nil
 }
 
-func NewMessage(data []byte) (m *Message, err error) {
+func NewMessage(data []byte, checksum bool) (m *Message, err error) {
 	if len(data) < OffsetMsgData {
 		return nil, ErrInvalidHeader.Format("short length")
 	}
@@ -209,31 +208,27 @@ func NewMessage(data []byte) (m *Message, err error) {
 	m.MsgId = binary.LittleEndian.Uint64(data[OffsetMsgId:])
 	m.Crc = binary.LittleEndian.Uint32(data[OffsetMsgCrc:])
 
-	buf := bytes.NewBuffer(data[OffsetMsgCrcCheck:])
-	h := crc32.NewIEEE()
-	h.Write(buf.Bytes())
-	if m.Crc != h.Sum32() {
-		return nil, ErrChecksumNotMatch.Trace(m.Crc, h.Sum32())
+	if checksum {
+		h := crc32.NewIEEE()
+		h.Write(data[OffsetMsgCrcCheck:])
+		if m.Crc != h.Sum32() {
+			return nil, ErrChecksumNotMatch.Trace(m.Crc, h.Sum32())
+		}
 	}
-	if err = binary.Read(buf, binary.LittleEndian, &m.Version); err != nil {
-		return nil, ErrInvalidMessage.Format("read version")
-	}
+
+	m.Version = uint8(data[OffsetMsgVer])
 	switch m.Version {
 	case 1:
-		err = parseMsgV1(m, buf)
+		m.Data = data[OffsetMsgData:]
 	default:
-		err = ErrInvalidMessage.Format("unsupport version")
-	}
-	if err != nil {
-		return nil, logex.Trace(err)
+		return nil, ErrInvalidMessage.Format("unsupport version")
 	}
 
 	return m, nil
 }
 
-func parseMsgV1(m *Message, buf *bytes.Buffer) error {
-	m.Data = buf.Bytes()
-	return nil
+func (m *Message) Bytes() []byte {
+	return m.underlay
 }
 
 func (m *Message) SetMsgId(id uint64) {

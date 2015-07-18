@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bytes"
 	"io"
 
 	"gopkg.in/logex.v1"
@@ -10,16 +11,30 @@ var (
 	ErrSeekNotSupport = logex.Define("seek with whence(2) is not supported")
 )
 
-type BufReaderAt struct {
-	buf []byte
+type Buffer struct {
+	*bytes.Reader
+	Buf []byte
+	off int
 }
 
-func (r *BufReaderAt) ReadAt(p []byte, off int64) (n int, err error) {
-	n = copy(p, r.buf[int(off):])
-	if int(off)+n >= len(r.buf) {
-		err = io.EOF
+func NewBuffer(buf []byte) *Buffer {
+	bb := bytes.NewReader(buf)
+	_ = bb
+	b := Buffer{
+		Buf: buf,
 	}
+	b.Reader = bb
+	return &b
+}
+
+func (r *Buffer) Read(b []byte) (int, error) {
+	n, err := r.Reader.Read(b)
+	r.off += n
 	return n, err
+}
+
+func (r *Buffer) Bytes() []byte {
+	return r.Buf[r.off:]
 }
 
 type Reader struct {
@@ -28,7 +43,7 @@ type Reader struct {
 }
 
 func NewReaderBuf(b []byte) *Reader {
-	return &Reader{&BufReaderAt{b}, 0}
+	return &Reader{NewBuffer(b), 0}
 }
 
 func (r *Reader) Read(val []byte) (n int, err error) {
