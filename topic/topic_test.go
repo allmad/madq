@@ -4,6 +4,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"gopkg.in/logex.v1"
 
@@ -23,12 +24,83 @@ func init() {
 	os.RemoveAll(c.Root)
 }
 
+func BenchmarkSleep(b *testing.B) {
+	time.Sleep(100 * time.Millisecond)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		time.Sleep(time.Microsecond)
+	}
+}
+
+func BenchmarkTopicGet(b *testing.B) {
+	n := b.N
+	topic, err := New("bench-get", c)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	var wg2 sync.WaitGroup
+	replyErrs := make(chan []error)
+	go func() {
+		for _ = range replyErrs {
+			wg2.Done()
+		}
+	}()
+	msg := mmq.NewMessageByData(mmq.NewMessageData([]byte(utils.RandString(256))))
+	var buffer []*mmq.Message
+	for i := 0; i < n; i++ {
+		buffer = append(buffer, msg)
+		if len(buffer) > 100 {
+			wg2.Add(1)
+			topic.Put(buffer, replyErrs)
+			buffer = nil
+		}
+	}
+	wg2.Wait()
+	close(replyErrs)
+
+	b.ResetTimer()
+	reply := make(chan []*mmq.Message, 1024)
+
+	size := 0
+	off := int64(0)
+	var wg sync.WaitGroup
+	go func() {
+		for msgs := range reply {
+			wg.Add(1)
+			for _, m := range msgs {
+				off += int64(len(m.Bytes()))
+				wg.Done()
+			}
+			size -= len(msgs)
+			wg.Done()
+			if size == 0 {
+				continue
+			}
+		}
+	}()
+
+	for i := 0; i < n; i++ {
+		if size < 100 {
+			size++
+			continue
+		}
+
+		wg.Add(size)
+		if err := topic.GetSync(off, size, reply); err != nil {
+			b.Fatal(err)
+		}
+		wg.Wait()
+	}
+	close(reply)
+}
+
 func BenchmarkTopicPut(b *testing.B) {
 	topic, err := New("bench-put", c)
 	if err != nil {
 		b.Fatal(err)
 	}
-	msg := mmq.NewMessageByData([]byte(utils.RandString(256)))
+	msg := mmq.NewMessageByData(mmq.NewMessageData([]byte(utils.RandString(256))))
 	reply := make(chan []error)
 	var wg sync.WaitGroup
 	go func() {
@@ -84,7 +156,7 @@ func TestTopic(t *testing.T) {
 	}()
 	go func() {
 		for _, m := range testSource {
-			msg := mmq.NewMessageByData(m)
+			msg := mmq.NewMessageByData(mmq.NewMessageData(m))
 			errs := topic.PutSync([]*mmq.Message{msg})
 			logex.Error(errs)
 		}
