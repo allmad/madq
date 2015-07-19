@@ -36,6 +36,6 @@ nsq
 # compiling/running nsqd
 # creating topic/channel
 # compiling bench_reader/bench_writer
-PUB: [bench_writer] 2015/07/19 19:09:58 duration: 10.000433347s - 25.168mb/s - 131954.282ops/s - 7.578us/op
-SUB: [bench_reader] 2015/07/19 19:10:09 duration: 10.008640649s - 16.075mb/s - 84279.577ops/s - 11.865us/op
+PUB: [bench_writer] 2015/07/19 20:07:15 duration: 10.003577746s - 29.725mb/s - 155844.243ops/s - 6.417us/op
+SUB: [bench_reader] 2015/07/19 20:07:25 duration: 10.014623761s - 17.258mb/s - 90481.282ops/s - 11.052us/op
 ```
