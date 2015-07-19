@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	MaxBenchSize    = 100
-	MaxPutBenchSize = 1000
+	MaxGetBenchSize = 200
+	MaxPutBenchSize = 200
 )
 
 var (
@@ -166,7 +166,7 @@ func (t *Instance) getAsync(arg *getArgs, timer *time.Timer) {
 }
 
 func (t *Instance) get(arg *getArgs) error {
-	if arg.size > MaxBenchSize {
+	if arg.size > MaxGetBenchSize {
 		return ErrBenchSizeTooLarge.Trace(arg.size)
 	}
 

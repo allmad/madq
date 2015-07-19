@@ -4,7 +4,6 @@ import (
 	"os"
 	"sync"
 	"testing"
-	"time"
 
 	"gopkg.in/logex.v1"
 
@@ -22,14 +21,6 @@ func init() {
 	c.Root = "/data/mmq/test/topic"
 	os.MkdirAll(c.Root, 0777)
 	os.RemoveAll(c.Root)
-}
-
-func BenchmarkSleep(b *testing.B) {
-	time.Sleep(100 * time.Millisecond)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		time.Sleep(time.Microsecond)
-	}
 }
 
 func BenchmarkTopicGet(b *testing.B) {
@@ -50,7 +41,7 @@ func BenchmarkTopicGet(b *testing.B) {
 	var buffer []*mmq.Message
 	for i := 0; i < n; i++ {
 		buffer = append(buffer, msg)
-		if len(buffer) > 100 {
+		if len(buffer) > MaxPutBenchSize {
 			wg2.Add(1)
 			topic.Put(buffer, replyErrs)
 			buffer = nil
@@ -81,7 +72,7 @@ func BenchmarkTopicGet(b *testing.B) {
 	}()
 
 	for i := 0; i < n; i++ {
-		if size < 100 {
+		if size < MaxGetBenchSize {
 			size++
 			continue
 		}
@@ -113,7 +104,7 @@ func BenchmarkTopicPut(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		m, _ := mmq.NewMessage(msg.Bytes(), true)
 		buffer = append(buffer, m)
-		if len(buffer) >= 100 {
+		if len(buffer) >= MaxPutBenchSize {
 			wg.Add(1)
 			topic.Put(buffer, reply)
 			buffer = nil

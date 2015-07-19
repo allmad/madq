@@ -19,6 +19,15 @@ $ go test -benchtime=10s -bench=. github.com/chzyer/mmq/bench
 BenchmarkHttpPut	 3000000	      4693 ns/op (aka 213,083 rps)
 ```
 
+2. internal test (without network)
+```
+$ go test -v -benchmem -bench=. -run=Nothing github.com/chzyer/mmq/topic
+PASS
+BenchmarkTopicGet	  500000	      3598 ns/op	     431 B/op	       7 allocs/op (aka 277,932 rps)
+BenchmarkTopicPut	  500000	      3522 ns/op	     134 B/op	       3 allocs/op (aka 283,929 rps)
+ok  	github.com/chzyer/mmq/topic	6.795s
+```
+
 nsq
 ```
 # using --mem-queue-size=1000000 --data-path= --size=200 --batch-size=200
