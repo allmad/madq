@@ -18,3 +18,13 @@ $ go run github.com/chzyer/mmq/bench/httpserver/* # run the http server
 $ go test -benchtime=10s -bench=. github.com/chzyer/mmq/bench
 BenchmarkHttpPut	 3000000	      4693 ns/op (aka 213,083 rps)
 ```
+
+nsq
+```
+# using --mem-queue-size=1000000 --data-path= --size=200 --batch-size=200
+# compiling/running nsqd
+# creating topic/channel
+# compiling bench_reader/bench_writer
+PUB: [bench_writer] 2015/07/19 19:09:58 duration: 10.000433347s - 25.168mb/s - 131954.282ops/s - 7.578us/op
+SUB: [bench_reader] 2015/07/19 19:10:09 duration: 10.008640649s - 16.075mb/s - 84279.577ops/s - 11.865us/op
+```
