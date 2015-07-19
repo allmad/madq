@@ -1,0 +1,86 @@
+package main
+
+import (
+	"io"
+	"net/http"
+	"os"
+	"strconv"
+	"sync"
+
+	"gopkg.in/logex.v1"
+
+	"github.com/chzyer/mmq/mmq"
+	"github.com/chzyer/mmq/topic"
+)
+
+var (
+	m           sync.RWMutex
+	topics      = map[string]*topic.Instance{}
+	topicConfig *topic.Config
+)
+
+func init() {
+	topicConfig = new(topic.Config)
+	topicConfig.ChunkBit = 22
+	topicConfig.Root = "/data/mmq/http/topic"
+	os.MkdirAll(topicConfig.Root, 0777)
+	os.RemoveAll(topicConfig.Root)
+}
+
+func getTopic(name string) (t *topic.Instance, err error) {
+	m.RLock()
+	t, ok := topics[name]
+	m.RUnlock()
+	if ok {
+		return t, nil
+	}
+	t, err = topic.New(name, topicConfig)
+	if err != nil {
+		return t, logex.Trace(err)
+	}
+
+	m.Lock()
+	topics[name] = t
+	m.Unlock()
+	return t, nil
+}
+
+func pubHandler(w http.ResponseWriter, req *http.Request) {
+	name := req.FormValue("topic")
+	if name == "" {
+		http.Error(w, "missing topic", 403)
+		return
+	}
+	size, err := strconv.Atoi(req.FormValue("size"))
+	if err != nil {
+		http.Error(w, err.Error(), 403)
+		return
+	}
+
+	var (
+		msg    *mmq.Message
+		header mmq.HeaderBin
+		msgs   = make([]*mmq.Message, 0, size)
+	)
+	for !logex.Equal(err, io.EOF) {
+		msg, err = mmq.ReadMessage(&header, req.Body, mmq.RF_DEFAULT)
+		if err != nil {
+			break
+		}
+		msgs = append(msgs, msg)
+	}
+
+	t, err := getTopic(name)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	t.PutSync(msgs)
+	w.Write([]byte("hello"))
+}
+
+func main() {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/put", pubHandler)
+	http.ListenAndServe(":8611", mux)
+}
