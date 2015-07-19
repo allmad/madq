@@ -12,20 +12,22 @@ mmq is design to use in IM, follows pub/sub model, to achieve serve millions use
 
 ## Benchmark
 
-1. http test
+* http test
+
 ```
 $ go run github.com/chzyer/mmq/bench/httpserver/* # run the http server
 $ go test -benchtime=10s -bench=. github.com/chzyer/mmq/bench
 BenchmarkHttpPut	 3000000	      4693 ns/op (aka 213,083 rps)
 ```
 
-2. internal test (without network)
+* internal test (without network)
+
 ```
 $ go test -v -benchmem -bench=. -run=Nothing github.com/chzyer/mmq/topic
 PASS
-BenchmarkTopicGet	  500000	      3598 ns/op	     431 B/op	       7 allocs/op (aka 277,932 rps)
-BenchmarkTopicPut	  500000	      3522 ns/op	     134 B/op	       3 allocs/op (aka 283,929 rps)
-ok  	github.com/chzyer/mmq/topic	6.795s
+BenchmarkTopicGet	  500000	      3531 ns/op (aka 283,205 rps)	     431 B/op	       7 allocs/op
+BenchmarkTopicPut	  500000	      2991 ns/op (aka 334,336 rps) 	     134 B/op	       3 allocs/op
+ok  	github.com/chzyer/mmq/topic	4.404s
 ```
 
 nsq
