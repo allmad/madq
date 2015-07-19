@@ -64,8 +64,8 @@ func New(name string, config *Config) (t *Instance, err error) {
 	if err != nil {
 		return nil, logex.Trace(err)
 	}
-	// TODO: must read some metafile to determine the offset
-	t.writer = &utils.Writer{t.file, 0}
+
+	t.writer = &utils.Writer{t.file, t.file.Size()}
 	go t.ioLoop()
 	return t, nil
 }
@@ -132,7 +132,6 @@ func (t *Instance) put(arg *putArgs, timer *time.Timer) {
 		arg.msgs[i].SetMsgId(uint64(t.writer.Offset))
 		_, errs[i] = arg.msgs[i].WriteTo(t.writer)
 	}
-	timer.Reset(time.Second)
 	arg.reply <- errs
 }
 
@@ -162,12 +161,7 @@ func (t *Instance) Get(offset int64, size int, reply chan<- []*mmq.Message, err 
 
 func (t *Instance) getAsync(arg *getArgs, timer *time.Timer) {
 	err := t.get(arg)
-	timer.Reset(time.Second)
-	select {
-	case arg.err <- err:
-	case <-timer.C:
-		logex.Error("reply to get timeout")
-	}
+	arg.err <- err
 }
 
 func (t *Instance) get(arg *getArgs) error {
@@ -201,9 +195,7 @@ func (t *Instance) get(arg *getArgs) error {
 		p++
 	}
 
-	select {
-	case arg.reply <- msgs[:p]:
-	}
+	arg.reply <- msgs[:p]
 	return err
 }
 

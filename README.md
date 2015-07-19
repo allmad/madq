@@ -1,6 +1,6 @@
 # Multiplex Message Queue
 
-mmq is design to use in IM, follows pub/sub model, to achieve serve by millions of users indirectly.
+mmq is design to use in IM, follows pub/sub model, to achieve serve millions users by multiplex sockets.
 
 ## goal
 * possible to subscribe multiple topics/channels in one client.
@@ -8,5 +8,4 @@ mmq is design to use in IM, follows pub/sub model, to achieve serve by millions 
 * zero-extra-cost(disk) for multicasted messages/channels
 * distributed and decentralized topologies without single points of failure
 * the number of topic can be unlimit(depends on hardware)
-* every messages must accepted ack before mark done, auto requeue if message process timeout
-* provide a horizontally scalable solution
+* provide a horizontally scaling solution
