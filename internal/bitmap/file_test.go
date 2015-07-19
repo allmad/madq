@@ -6,14 +6,41 @@ import (
 	"os"
 	"testing"
 
+	"github.com/chzyer/mmq/internal/utils"
+
 	"gopkg.in/logex.v1"
 )
 
-func TestFile(t *testing.T) {
-	dirname := os.TempDir()
+func TestFileCon(t *testing.T) {
+	n := 100
+	dirname := "/data/mmq/test/bitmap.file.con"
+	os.RemoveAll(dirname)
 
-	os.RemoveAll(dirname + "/bitmap_file/")
-	f, err := NewFile(dirname + "/bitmap_file")
+	f, err := NewFileEx(dirname, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	buf := []byte(utils.RandString(3))
+	off := int64(0)
+	for i := 0; i < n; i++ {
+		n, err := f.WriteAt(buf, off)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != len(buf) {
+			t.Fatal("short write", n, len(buf))
+		}
+		off += int64(n)
+	}
+}
+
+func TestFile(t *testing.T) {
+	dirname := "/data/mmq/test/bitmap.file"
+
+	os.RemoveAll(dirname)
+	f, err := NewFile(dirname)
 	if err != nil {
 		t.Fatal(err)
 	}

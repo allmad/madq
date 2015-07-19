@@ -30,6 +30,7 @@ var (
 	ErrMessageTooLarge  = logex.Define("message size exceed limit")
 	ErrReadFlagInvalid  = logex.Define("set ReadFlag to RF_RESEEK_ON_FAULT required r is *utils.Reader")
 	ErrReseekReachLimit = logex.Define("reseek reach size limit")
+	ErrMsgIdNotMatch    = logex.Define("message id not match as expect")
 
 	ErrReseekable = []error{
 		ErrMagicNotMatch, ErrChecksumNotMatch, ErrInvalidLength,
@@ -88,27 +89,41 @@ type Message struct {
 	underlay []byte
 }
 
-func NewMessageByData(data []byte) *Message {
-	length := OffsetMsgData + len(data)
-	underlay := make([]byte, length)
-	copy(underlay[OffsetMsgData:], data)
+type MessageData struct {
+	underlay []byte
+}
 
+func NewMessageData(b []byte) *MessageData {
+	m := &MessageData{
+		underlay: make([]byte, len(b)+OffsetMsgData),
+	}
+	copy(m.underlay[OffsetMsgBody:], b)
+	return m
+}
+
+func (m *MessageData) Bytes() []byte {
+	return m.underlay[OffsetMsgBody:]
+}
+
+func NewMessageByData(data *MessageData) *Message {
+	underlay := data.underlay
 	underlay[OffsetMsgVer] = byte(1)
 	h := crc32.NewIEEE()
 	h.Write(underlay[OffsetMsgVer:])
 
 	m := &Message{
-		Length:   uint32(length - OffsetMsgBody),
+		Length:   uint32(len(underlay) - OffsetMsgBody),
 		Crc:      h.Sum32(),
 		Version:  1,
-		Data:     data,
+		Data:     data.Bytes(),
 		underlay: underlay,
 	}
 
 	copy(underlay, MagicBytes)
 	binary.LittleEndian.PutUint32(underlay[OffsetMsgLength:], m.Length)
-	// skip msg id
+	binary.LittleEndian.PutUint64(underlay[OffsetMsgId:], 0)
 	binary.LittleEndian.PutUint32(underlay[OffsetMsgCrc:], m.Crc)
+
 	return m
 }
 
@@ -156,6 +171,12 @@ func ReadMessage(reuseBuf *HeaderBin, reader io.Reader, rf ReadFlag) (*Message, 
 
 func readMessage(reuseBuf *HeaderBin, r io.Reader, checksum bool) (int, *Message, error) {
 	header := reuseBuf[:]
+	var expectMsgId *uint64
+	if r, ok := r.(*utils.Reader); ok {
+		off := uint64(r.Offset)
+		expectMsgId = &off
+	}
+
 	n, err := io.ReadFull(r, header)
 	nRead := n
 	if err != nil {
@@ -168,12 +189,21 @@ func readMessage(reuseBuf *HeaderBin, r io.Reader, checksum bool) (int, *Message
 	}
 
 	content := make([]byte, SizeMsgHeader+int(length))
-	if n, err = io.ReadFull(r, content[SizeMsgHeader:]); err != nil {
-		return nRead + n, nil, logex.Trace(err)
+	n, err = io.ReadFull(r, content[SizeMsgHeader:])
+	nRead += n
+	if err != nil {
+		return nRead, nil, logex.Trace(err)
 	}
+
 	copy(content, header)
 	m, err := NewMessage(content, checksum)
-	return nRead + n, m, logex.Trace(err)
+	if err != nil {
+		return nRead, nil, logex.Trace(err)
+	}
+	if expectMsgId != nil && m.MsgId != *expectMsgId {
+		return nRead, nil, ErrMsgIdNotMatch.Trace(*expectMsgId, m.MsgId)
+	}
+	return nRead, m, nil
 }
 
 func ReadMessageHeader(buf []byte, lengthRef *uint32) (err error) {

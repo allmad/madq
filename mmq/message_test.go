@@ -1,7 +1,6 @@
 package mmq
 
 import (
-	"bytes"
 	"reflect"
 	"testing"
 
@@ -11,7 +10,7 @@ import (
 )
 
 func BenchmarkNewMessageByData(b *testing.B) {
-	source := []byte(utils.RandString(256))
+	source := NewMessageData([]byte(utils.RandString(256)))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		NewMessageByData(source)
@@ -19,7 +18,7 @@ func BenchmarkNewMessageByData(b *testing.B) {
 }
 
 func BenchmarkNewMessageRaw256(b *testing.B) {
-	m := NewMessageByData([]byte(utils.RandString(256)))
+	m := NewMessageByData(NewMessageData([]byte(utils.RandString(256))))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		NewMessage(m.underlay, false)
@@ -27,27 +26,34 @@ func BenchmarkNewMessageRaw256(b *testing.B) {
 }
 
 func TestMessage(t *testing.T) {
-	m := NewMessageByData([]byte("hello"))
-	m2, err := NewMessage(m.underlay, true)
-	if err != nil {
-		t.Error(err)
-	}
-	if !reflect.DeepEqual(m, m2) {
-		logex.Struct(m, m2)
-		t.Error("result not expect")
+	m := NewMessageByData(NewMessageData([]byte("hello")))
+	{
+		m2, err := NewMessage(m.underlay, true)
+		if err != nil {
+			t.Error(err)
+		}
+		if !reflect.DeepEqual(m, m2) {
+			logex.Struct(m, m2)
+			t.Error("result not expect")
+		}
 	}
 	var header HeaderBin
-	m3, err := ReadMessage(&header, bytes.NewReader(m.underlay), RF_DEFAULT)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(m, m3) {
-		logex.Struct(m, m3)
-		t.Error("result not expect")
+	{
+		m3, err := ReadMessage(&header, utils.NewReaderBuf(m.underlay), RF_DEFAULT)
+		if err != nil {
+			logex.Error(err)
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(m, m3) {
+			logex.Struct(m, m3)
+			t.Error("result not expect")
+		}
 	}
 
 	{
-		buf := utils.NewReaderBuf(append([]byte("hello"), m.underlay...))
+		prefix := []byte("hello")
+		m.SetMsgId(uint64(len(prefix)))
+		buf := utils.NewReaderBuf(append(prefix, m.underlay...))
 		m4, err := ReadMessage(&header, buf, RF_RESEEK_ON_FAULT)
 		if err != nil {
 			logex.Error(err)
@@ -57,11 +63,13 @@ func TestMessage(t *testing.T) {
 			logex.Struct(m, m4)
 			t.Error("result not expect")
 		}
+		m.SetMsgId(0)
 	}
 
 	{
 		bin := append([]byte("hello"), MagicBytes...)
 		bin = append(bin, []byte{4, 0, 0, 0}...)
+		m.SetMsgId(uint64(len(bin)))
 		bin = append(bin, m.underlay...)
 		buf := utils.NewReaderBuf(bin)
 		m5, err := ReadMessage(&header, buf, RF_RESEEK_ON_FAULT)
@@ -73,6 +81,7 @@ func TestMessage(t *testing.T) {
 			logex.Struct(m, m5)
 			t.Error("result not expect")
 		}
+		m.SetMsgId(0)
 	}
 
 }

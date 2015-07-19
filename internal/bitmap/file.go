@@ -12,9 +12,8 @@ import (
 )
 
 const (
-	CacheSize        = 8
-	DefaultChunkBit  = 30
-	DefaultChunkSize = 1 << DefaultChunkBit
+	CacheSize       = 8
+	DefaultChunkBit = 22
 )
 
 type fileCtx struct {
@@ -59,6 +58,10 @@ func NewFileEx(path string, chunkBit uint) (*File, error) {
 	}, nil
 }
 
+func (f *File) getIdx(off int64) int64 {
+	return off >> f.chunkBit
+}
+
 func (f *File) getFile(offset int64) (*fileCtx, error) {
 	idx := offset >> f.chunkBit
 	name := strconv.FormatInt(idx, 36)
@@ -100,16 +103,19 @@ func (f *File) WriteAt(buf []byte, at int64) (n int, err error) {
 
 	chunkOffset := at - ((at >> f.chunkBit) << f.chunkBit)
 	sizeLeft := int64(f.chunkSize) - chunkOffset
-	if sizeLeft > int64(len(buf)) {
+
+	if sizeLeft >= int64(len(buf)) {
 		return fctx.WriteAt(buf, chunkOffset)
 	}
 
-	n, err = fctx.WriteAt(buf[:sizeLeft], at>>f.chunkBit)
+	n, err = fctx.WriteAt(buf[:sizeLeft], chunkOffset)
 	if err != nil {
 		return n, logex.Trace(err)
 	}
 
-	return f.WriteAt(buf[sizeLeft:], at+sizeLeft)
+	nRead, err := f.WriteAt(buf[sizeLeft:], at+sizeLeft)
+	n += nRead
+	return n, logex.Trace(err)
 }
 
 func (f *File) ReadAt(buf []byte, at int64) (n int, err error) {
@@ -133,6 +139,7 @@ func (f *File) ReadAt(buf []byte, at int64) (n int, err error) {
 		return n, logex.Trace(err, chunkOffset)
 	}
 
+	// println(at, at>>f.chunkBit, int64(n), chunkOffset, sizeLeft)
 	nNew, err := f.ReadAt(buf[n:], at+int64(n))
 	n += nNew
 	return n, logex.Trace(err, at+int64(n))
