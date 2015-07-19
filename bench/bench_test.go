@@ -13,16 +13,17 @@ import (
 
 func BenchmarkHttpPut(b *testing.B) {
 	var data []byte
-	for i := 0; i < 100; i++ {
-		msg := mmq.NewMessageByData(mmq.NewMessageData([]byte(utils.RandString(256))))
+	batch := 200
+	for i := 0; i < batch; i++ {
+		msg := mmq.NewMessageByData(mmq.NewMessageData([]byte(utils.RandString(200))))
 		data = append(data, msg.Bytes()...)
 	}
 	r := bytes.NewReader(data)
 	client := &http.Client{}
 	buffer := 0
-	url := "http://localhost:8611/put?topic=http-test&size=100"
+	url := "http://localhost:8611/put?topic=http-test&size=200"
 	for i := 0; i < b.N; i++ {
-		if buffer < 100 {
+		if buffer < batch {
 			buffer++
 			continue
 		}
