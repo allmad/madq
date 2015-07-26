@@ -1,4 +1,4 @@
-package mmq
+package message
 
 import (
 	"bufio"
@@ -89,20 +89,9 @@ type Message struct {
 	underlay []byte
 }
 
-type MessageData struct {
-	underlay []byte
-}
-
-func NewMessageData(b []byte) *MessageData {
-	m := &MessageData{
-		underlay: make([]byte, len(b)+OffsetMsgData),
-	}
-	copy(m.underlay[OffsetMsgBody:], b)
-	return m
-}
-
-func (m *MessageData) Bytes() []byte {
-	return m.underlay[OffsetMsgBody:]
+type ReplyMsgCtx struct {
+	Topic string
+	Msgs  []*Message
 }
 
 func NewMessageByData(data *MessageData) *Message {
@@ -118,6 +107,7 @@ func NewMessageByData(data *MessageData) *Message {
 		Data:     data.Bytes(),
 		underlay: underlay,
 	}
+	logex.Info(data.Bytes())
 
 	copy(underlay, MagicBytes)
 	binary.LittleEndian.PutUint32(underlay[OffsetMsgLength:], m.Length)
@@ -273,4 +263,20 @@ func (m *Message) WriteTo(w io.Writer) (int, error) {
 
 func (m *Message) String() string {
 	return fmt.Sprintf("%+v", *m)
+}
+
+type MessageData struct {
+	underlay []byte
+}
+
+func NewMessageData(b []byte) *MessageData {
+	m := &MessageData{
+		underlay: make([]byte, len(b)+OffsetMsgData),
+	}
+	copy(m.underlay[OffsetMsgData:], b)
+	return m
+}
+
+func (m *MessageData) Bytes() []byte {
+	return m.underlay[OffsetMsgData:]
 }

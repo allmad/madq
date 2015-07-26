@@ -9,7 +9,7 @@ import (
 
 	"gopkg.in/logex.v1"
 
-	"github.com/chzyer/mmq/mmq"
+	"github.com/chzyer/mmq/message"
 	"github.com/chzyer/mmq/topic"
 )
 
@@ -22,7 +22,7 @@ var (
 func init() {
 	topicConfig = new(topic.Config)
 	topicConfig.ChunkBit = 22
-	topicConfig.Root = "/data/mmq/http/topic"
+	topicConfig.Root = "/data/message/http/topic"
 	os.MkdirAll(topicConfig.Root, 0777)
 	os.RemoveAll(topicConfig.Root)
 }
@@ -58,12 +58,12 @@ func pubHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	var (
-		msg    *mmq.Message
-		header mmq.HeaderBin
-		msgs   = make([]*mmq.Message, 0, size)
+		msg    *message.Message
+		header message.HeaderBin
+		msgs   = make([]*message.Message, 0, size)
 	)
 	for !logex.Equal(err, io.EOF) {
-		msg, err = mmq.ReadMessage(&header, req.Body, mmq.RF_DEFAULT)
+		msg, err = message.ReadMessage(&header, req.Body, message.RF_DEFAULT)
 		if err != nil {
 			break
 		}

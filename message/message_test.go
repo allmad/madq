@@ -1,4 +1,4 @@
-package mmq
+package message
 
 import (
 	"reflect"
@@ -30,11 +30,11 @@ func TestMessage(t *testing.T) {
 	{
 		m2, err := NewMessage(m.underlay, true)
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 		if !reflect.DeepEqual(m, m2) {
 			logex.Struct(m, m2)
-			t.Error("result not expect")
+			t.Fatal("result not expect")
 		}
 	}
 	var header HeaderBin
@@ -46,7 +46,7 @@ func TestMessage(t *testing.T) {
 		}
 		if !reflect.DeepEqual(m, m3) {
 			logex.Struct(m, m3)
-			t.Error("result not expect")
+			t.Fatal("result not expect")
 		}
 	}
 
@@ -61,7 +61,7 @@ func TestMessage(t *testing.T) {
 		}
 		if !reflect.DeepEqual(m, m4) {
 			logex.Struct(m, m4)
-			t.Error("result not expect")
+			t.Fatal("result not expect")
 		}
 		m.SetMsgId(0)
 	}
@@ -79,7 +79,7 @@ func TestMessage(t *testing.T) {
 		}
 		if !reflect.DeepEqual(m, m5) {
 			logex.Struct(m, m5)
-			t.Error("result not expect")
+			t.Fatal("result not expect")
 		}
 		m.SetMsgId(0)
 	}

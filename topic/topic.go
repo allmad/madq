@@ -11,7 +11,7 @@ import (
 
 	"github.com/chzyer/mmq/internal/bitmap"
 	"github.com/chzyer/mmq/internal/utils"
-	"github.com/chzyer/mmq/mmq"
+	"github.com/chzyer/mmq/message"
 )
 
 const (
@@ -113,17 +113,17 @@ func (t *Instance) ioLoop() {
 }
 
 type putArgs struct {
-	msgs  []*mmq.Message
+	msgs  []*message.Message
 	reply chan<- []error
 }
 
-func (t *Instance) PutSync(msgs []*mmq.Message) []error {
+func (t *Instance) PutSync(msgs []*message.Message) []error {
 	reply := make(chan []error)
 	t.Put(msgs, reply)
 	return <-reply
 }
 
-func (t *Instance) Put(msgs []*mmq.Message, reply chan []error) {
+func (t *Instance) Put(msgs []*message.Message, reply chan []error) {
 	t.putChan <- &putArgs{msgs, reply}
 }
 
@@ -139,7 +139,7 @@ func (t *Instance) put(arg *putArgs, timer *time.Timer) {
 type getArgs struct {
 	offset int64
 	size   int
-	reply  chan<- []*mmq.Message
+	reply  chan<- []*message.Message
 	err    chan<- error
 
 	// context
@@ -147,13 +147,13 @@ type getArgs struct {
 	oriSize int
 }
 
-func (t *Instance) GetSync(offset int64, size int, reply chan<- []*mmq.Message) error {
+func (t *Instance) GetSync(offset int64, size int, reply chan<- []*message.Message) error {
 	errReply := make(chan error)
 	t.Get(offset, size, reply, errReply)
 	return <-errReply
 }
 
-func (t *Instance) Get(offset int64, size int, reply chan<- []*mmq.Message, err chan<- error) {
+func (t *Instance) Get(offset int64, size int, reply chan<- []*message.Message, err chan<- error) {
 	t.getChan <- &getArgs{
 		offset, size, reply, err,
 		offset, size,
@@ -170,19 +170,19 @@ func (t *Instance) get(arg *getArgs) error {
 		return ErrBenchSizeTooLarge.Trace(arg.size)
 	}
 
-	msgs := make([]*mmq.Message, arg.size)
+	msgs := make([]*message.Message, arg.size)
 	var (
-		msg *mmq.Message
+		msg *message.Message
 		err error
 	)
 
-	var header mmq.HeaderBin
+	var header message.HeaderBin
 
 	// check offset
 	r := &utils.Reader{t.file, arg.offset}
 	p := 0
 	for i := 0; i < arg.size; i++ {
-		msg, err = mmq.ReadMessage(&header, r, mmq.RF_RESEEK_ON_FAULT)
+		msg, err = message.ReadMessage(&header, r, message.RF_RESEEK_ON_FAULT)
 		err = logex.Trace(err, i)
 		if logex.EqualAny(err, ErrNeedAddToWaiter) {
 			// not finish, add to waiterList

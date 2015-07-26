@@ -1,6 +1,6 @@
 package topic
 
-import "github.com/chzyer/mmq/mmq"
+import "github.com/chzyer/mmq/message"
 
 // a client has multiple waiters
 //
@@ -13,7 +13,7 @@ type Waiter struct {
 	offset  int64
 	size    int
 	oriSize int
-	reply   chan<- []*mmq.Message
+	reply   chan<- []*message.Message
 }
 
 func (w *Waiter) toGetArg(err chan<- error) *getArgs {

@@ -8,7 +8,7 @@ import (
 	"gopkg.in/logex.v1"
 
 	"github.com/chzyer/mmq/internal/utils"
-	"github.com/chzyer/mmq/mmq"
+	"github.com/chzyer/mmq/message"
 )
 
 var (
@@ -18,7 +18,7 @@ var (
 func init() {
 	c = new(Config)
 	c.ChunkBit = 22
-	c.Root = "/data/mmq/test/topic"
+	c.Root = "/data/message/test/topic"
 	os.MkdirAll(c.Root, 0777)
 	os.RemoveAll(c.Root)
 }
@@ -37,8 +37,8 @@ func BenchmarkTopicGet(b *testing.B) {
 			wg2.Done()
 		}
 	}()
-	msg := mmq.NewMessageByData(mmq.NewMessageData([]byte(utils.RandString(256))))
-	var buffer []*mmq.Message
+	msg := message.NewMessageByData(message.NewMessageData([]byte(utils.RandString(256))))
+	var buffer []*message.Message
 	for i := 0; i < n; i++ {
 		buffer = append(buffer, msg)
 		if len(buffer) > MaxPutBenchSize {
@@ -51,7 +51,7 @@ func BenchmarkTopicGet(b *testing.B) {
 	close(replyErrs)
 
 	b.ResetTimer()
-	reply := make(chan []*mmq.Message, 1024)
+	reply := make(chan []*message.Message, 1024)
 
 	size := 0
 	off := int64(0)
@@ -91,7 +91,7 @@ func BenchmarkTopicPut(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	msg := mmq.NewMessageByData(mmq.NewMessageData([]byte(utils.RandString(256))))
+	msg := message.NewMessageByData(message.NewMessageData([]byte(utils.RandString(256))))
 	reply := make(chan []error)
 	var wg sync.WaitGroup
 	go func() {
@@ -100,9 +100,9 @@ func BenchmarkTopicPut(b *testing.B) {
 		}
 	}()
 	b.ResetTimer()
-	buffer := []*mmq.Message{}
+	buffer := []*message.Message{}
 	for i := 0; i < b.N; i++ {
-		m, _ := mmq.NewMessage(msg.Bytes(), true)
+		m, _ := message.NewMessage(msg.Bytes(), true)
 		buffer = append(buffer, m)
 		if len(buffer) >= MaxPutBenchSize {
 			wg.Add(1)
@@ -126,7 +126,7 @@ func TestTopic(t *testing.T) {
 	}
 	wg.Add(len(testSource))
 	go func() {
-		incoming := make(chan []*mmq.Message, len(testSource))
+		incoming := make(chan []*message.Message, len(testSource))
 		errChan := make(chan error)
 		topic.Get(0, len(testSource), incoming, errChan)
 		idx := 0
@@ -147,8 +147,8 @@ func TestTopic(t *testing.T) {
 	}()
 	go func() {
 		for _, m := range testSource {
-			msg := mmq.NewMessageByData(mmq.NewMessageData(m))
-			errs := topic.PutSync([]*mmq.Message{msg})
+			msg := message.NewMessageByData(message.NewMessageData(m))
+			errs := topic.PutSync([]*message.Message{msg})
 			logex.Error(errs)
 		}
 	}()

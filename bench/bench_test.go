@@ -8,14 +8,14 @@ import (
 	"testing"
 
 	"github.com/chzyer/mmq/internal/utils"
-	"github.com/chzyer/mmq/mmq"
+	"github.com/chzyer/mmq/message"
 )
 
 func BenchmarkHttpPut(b *testing.B) {
 	var data []byte
 	batch := 200
 	for i := 0; i < batch; i++ {
-		msg := mmq.NewMessageByData(mmq.NewMessageData([]byte(utils.RandString(200))))
+		msg := message.NewMessageByData(message.NewMessageData([]byte(utils.RandString(200))))
 		data = append(data, msg.Bytes()...)
 	}
 	r := bytes.NewReader(data)
