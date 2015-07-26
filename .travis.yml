@@ -3,8 +3,8 @@ sudo: required
 go:
   - 1.4
 before_install:
-  - sudo mkdir -p /data/mmq
-  - sudo chmod 777 /data/mmq
+  - sudo mkdir -p /data/muxque
+  - sudo chmod 777 /data/muxque
   - go get gopkg.in/logex.v1
   - go get github.com/axw/gocov/gocov
   - go get github.com/mattn/goveralls

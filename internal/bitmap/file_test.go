@@ -12,7 +12,7 @@ import (
 
 func TestFileCon(t *testing.T) {
 	n := 100
-	dirname := "/data/mmq/test/bitmap.file.con"
+	dirname := "/data/muxque/test/bitmap.file.con"
 	os.RemoveAll(dirname)
 
 	f, err := NewFileEx(dirname, 1)
@@ -36,7 +36,7 @@ func TestFileCon(t *testing.T) {
 }
 
 func TestFile(t *testing.T) {
-	dirname := "/data/mmq/test/bitmap.file"
+	dirname := "/data/muxque/test/bitmap.file"
 
 	os.RemoveAll(dirname)
 	f, err := NewFile(dirname)

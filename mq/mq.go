@@ -6,17 +6,17 @@ import (
 	"gopkg.in/logex.v1"
 )
 
-type Mmq struct {
+type Muxque struct {
 	defaultTopicConfig *topic.Config
 
 	topics map[string]*topic.Ins
 }
 
-func NewMmq(path string) (*Mmq, error) {
+func NewMuxque(path string) (*Muxque, error) {
 	return nil, nil
 }
 
-func (m *Mmq) getTopic(name string) *topic.Ins {
+func (m *Muxque) getTopic(name string) *topic.Ins {
 	var err error
 	ins := m.topics[name]
 	if ins == nil {
@@ -29,10 +29,10 @@ func (m *Mmq) getTopic(name string) *topic.Ins {
 	return ins
 }
 
-func (m *Mmq) PutSync(topicName string, data []*message.Ins) []error {
+func (m *Muxque) PutSync(topicName string, data []*message.Ins) []error {
 	return m.getTopic(topicName).PutSync(data)
 }
 
-func (m *Mmq) GetSync(topicName string, offset int64, size int, reply message.ReplyChan) error {
+func (m *Muxque) GetSync(topicName string, offset int64, size int, reply message.ReplyChan) error {
 	return logex.Trace(m.getTopic(topicName).GetSync(offset, size, reply))
 }
