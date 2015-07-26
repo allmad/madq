@@ -7,10 +7,9 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/chzyer/muxque/message"
+	"github.com/chzyer/muxque/topic"
 	"gopkg.in/logex.v1"
-
-	"github.com/chzyer/mmq/message"
-	"github.com/chzyer/mmq/topic"
 )
 
 var (

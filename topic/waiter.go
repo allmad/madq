@@ -1,6 +1,6 @@
 package topic
 
-import "github.com/chzyer/mmq/message"
+import "github.com/chzyer/muxque/message"
 
 // a client has multiple waiters
 //

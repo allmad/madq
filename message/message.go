@@ -8,8 +8,7 @@ import (
 	"io"
 	"math"
 
-	"github.com/chzyer/mmq/internal/utils"
-
+	"github.com/chzyer/muxque/internal/utils"
 	"gopkg.in/logex.v1"
 )
 
@@ -88,6 +87,8 @@ type Ins struct {
 
 	underlay []byte
 }
+
+type ReplyChan chan<- *ReplyCtx
 
 type ReplyCtx struct {
 	Topic string

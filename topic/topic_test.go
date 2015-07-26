@@ -5,10 +5,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/chzyer/muxque/internal/utils"
+	"github.com/chzyer/muxque/message"
 	"gopkg.in/logex.v1"
-
-	"github.com/chzyer/mmq/internal/utils"
-	"github.com/chzyer/mmq/message"
 )
 
 var (

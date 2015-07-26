@@ -4,14 +4,12 @@ import (
 	"container/list"
 	"fmt"
 	"io"
-
-	"gopkg.in/logex.v1"
-
 	"time"
 
-	"github.com/chzyer/mmq/internal/bitmap"
-	"github.com/chzyer/mmq/internal/utils"
-	"github.com/chzyer/mmq/message"
+	"github.com/chzyer/muxque/internal/bitmap"
+	"github.com/chzyer/muxque/internal/utils"
+	"github.com/chzyer/muxque/message"
+	"gopkg.in/logex.v1"
 )
 
 const (
@@ -27,9 +25,8 @@ var (
 )
 
 type Config struct {
-	Root      string
-	IndexName string // ??
-	ChunkBit  uint
+	Root     string
+	ChunkBit uint
 }
 
 func (c *Config) Path(name string) string {
@@ -147,13 +144,13 @@ type getArgs struct {
 	oriSize int
 }
 
-func (t *Ins) GetSync(offset int64, size int, reply chan<- *message.ReplyCtx) error {
+func (t *Ins) GetSync(offset int64, size int, reply message.ReplyChan) error {
 	errReply := make(chan error)
 	t.Get(offset, size, reply, errReply)
 	return <-errReply
 }
 
-func (t *Ins) Get(offset int64, size int, reply chan<- *message.ReplyCtx, err chan<- error) {
+func (t *Ins) Get(offset int64, size int, reply message.ReplyChan, err chan<- error) {
 	t.getChan <- &getArgs{
 		offset, size, reply, err,
 		offset, size,

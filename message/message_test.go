@@ -4,8 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/chzyer/mmq/internal/utils"
-
+	"github.com/chzyer/muxque/internal/utils"
 	"gopkg.in/logex.v1"
 )
 

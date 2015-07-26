@@ -1,13 +1,12 @@
 # Multiplex Message Queue
 
-[![Software License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE.md)
 [![Build Status](https://travis-ci.org/chzyer/mmq.svg?branch=master)](https://travis-ci.org/chzyer/mmq)
 [![Coverage Status](https://coveralls.io/repos/chzyer/mmq/badge.svg?branch=master)](https://coveralls.io/r/chzyer/mmq?branch=master)
+[![Software License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE.md)
 
 mmq is design to use in IM, follows pub/sub model, to achieve serve millions users by multiplex sockets.
 
-
-## goal
+### goal
 * possible to subscribe multiple topics/channels in one client.
 * always persist messages to disk to keep them safe
 * zero-extra-cost(disk) for multicasted messages/channels
@@ -15,7 +14,7 @@ mmq is design to use in IM, follows pub/sub model, to achieve serve millions use
 * the number of topic can be unlimit(depends on hardware)
 * provide a horizontally scaling solution
 
-## Benchmark
+### benchmark
 
 * http test
 

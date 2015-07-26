@@ -1,5 +1,7 @@
+install:
+	go install ./...
 
-test:
+test: install
 	go test ./...
 
 cover:
