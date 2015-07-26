@@ -11,4 +11,4 @@ before_install:
   - go get golang.org/x/tools/cmd/cover
 script:
   - ./goverall.sh
-  - $HOME/gopath/bin/goveralls -service=travis-ci -coverprofile=.cover.out
+  - bash -c "$HOME/gopath/bin/goveralls -service=travis-ci -coverprofile=.cover.out"
