@@ -1,0 +1,11 @@
+language: go
+go:
+  - 1.4
+before_install:
+  - go get gopkg.in/logex.v1
+  - go get github.com/axw/gocov/gocov
+  - go get github.com/mattn/goveralls
+  - go get golang.org/x/tools/cmd/cover
+script:
+  - ./goverall.sh
+  - $HOME/gopath/bin/goveralls -service=travis-ci -coverprofile=.cover.out
