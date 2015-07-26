@@ -1,9 +1,10 @@
 language: go
+env:
+  - TEST_ROOT=$HOME/test
 go:
   - 1.4
 before_install:
-  - sudo mkdir -p /data/muxque
-  - sudo chmod 777 /data/muxque
+  - mkdir $TEST_ROOT
   - go get gopkg.in/logex.v1
   - go get github.com/axw/gocov/gocov
   - go get github.com/mattn/goveralls

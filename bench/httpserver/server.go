@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/chzyer/muxque/internal/utils"
 	"github.com/chzyer/muxque/message"
 	"github.com/chzyer/muxque/topic"
 	"gopkg.in/logex.v1"
@@ -21,7 +22,7 @@ var (
 func init() {
 	topicConfig = new(topic.Config)
 	topicConfig.ChunkBit = 22
-	topicConfig.Root = "/data/message/http/topic"
+	topicConfig.Root = utils.GetRoot("/http/topic")
 	os.MkdirAll(topicConfig.Root, 0777)
 	os.RemoveAll(topicConfig.Root)
 }

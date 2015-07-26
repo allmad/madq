@@ -18,7 +18,7 @@ var (
 func init() {
 	c = new(Config)
 	c.ChunkBit = 22
-	c.Root = "/data/muxque/test/topic"
+	c.Root = utils.GetRoot("/test/topic")
 	os.MkdirAll(c.Root, 0777)
 	os.RemoveAll(c.Root)
 }
