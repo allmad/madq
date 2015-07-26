@@ -6,6 +6,7 @@
 
 mmq is design to use in IM, follows pub/sub model, to achieve serve millions users by multiplex sockets.
 
+
 ## goal
 * possible to subscribe multiple topics/channels in one client.
 * always persist messages to disk to keep them safe
