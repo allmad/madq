@@ -37,7 +37,7 @@ func TestMessage(t *testing.T) {
 			t.Fatal("result not expect")
 		}
 	}
-	var header HeaderBin
+	var header Header
 	{
 		m3, err := ReadMessage(&header, utils.NewReaderBuf(m.underlay), RF_DEFAULT)
 		if err != nil {

@@ -36,7 +36,7 @@ func (c *Config) Path(name string) string {
 	return fmt.Sprintf("%s/%s", c.Root, name)
 }
 
-type Instance struct {
+type Ins struct {
 	Name   string
 	config *Config
 	index  int
@@ -51,8 +51,8 @@ type Instance struct {
 	getChan    chan *getArgs
 }
 
-func New(name string, config *Config) (t *Instance, err error) {
-	t = &Instance{
+func New(name string, config *Config) (t *Ins, err error) {
+	t = &Ins{
 		config:     config,
 		Name:       name,
 		waiterList: list.New(),
@@ -71,11 +71,11 @@ func New(name string, config *Config) (t *Instance, err error) {
 	return t, nil
 }
 
-func (t *Instance) nameEncoded() string {
+func (t *Ins) nameEncoded() string {
 	return utils.PathEncode(t.Name)
 }
 
-func (t *Instance) ioLoop() {
+func (t *Ins) ioLoop() {
 	var (
 		put *putArgs
 		get *getArgs
@@ -113,21 +113,21 @@ func (t *Instance) ioLoop() {
 }
 
 type putArgs struct {
-	msgs  []*message.Message
+	msgs  []*message.Ins
 	reply chan<- []error
 }
 
-func (t *Instance) PutSync(msgs []*message.Message) []error {
+func (t *Ins) PutSync(msgs []*message.Ins) []error {
 	reply := make(chan []error)
 	t.Put(msgs, reply)
 	return <-reply
 }
 
-func (t *Instance) Put(msgs []*message.Message, reply chan []error) {
+func (t *Ins) Put(msgs []*message.Ins, reply chan []error) {
 	t.putChan <- &putArgs{msgs, reply}
 }
 
-func (t *Instance) put(arg *putArgs, timer *time.Timer) {
+func (t *Ins) put(arg *putArgs, timer *time.Timer) {
 	errs := make([]error, len(arg.msgs))
 	for i := 0; i < len(arg.msgs); i++ {
 		arg.msgs[i].SetMsgId(uint64(t.writer.Offset))
@@ -139,7 +139,7 @@ func (t *Instance) put(arg *putArgs, timer *time.Timer) {
 type getArgs struct {
 	offset int64
 	size   int
-	reply  chan<- []*message.Message
+	reply  chan<- *message.ReplyCtx
 	err    chan<- error
 
 	// context
@@ -147,36 +147,36 @@ type getArgs struct {
 	oriSize int
 }
 
-func (t *Instance) GetSync(offset int64, size int, reply chan<- []*message.Message) error {
+func (t *Ins) GetSync(offset int64, size int, reply chan<- *message.ReplyCtx) error {
 	errReply := make(chan error)
 	t.Get(offset, size, reply, errReply)
 	return <-errReply
 }
 
-func (t *Instance) Get(offset int64, size int, reply chan<- []*message.Message, err chan<- error) {
+func (t *Ins) Get(offset int64, size int, reply chan<- *message.ReplyCtx, err chan<- error) {
 	t.getChan <- &getArgs{
 		offset, size, reply, err,
 		offset, size,
 	}
 }
 
-func (t *Instance) getAsync(arg *getArgs, timer *time.Timer) {
+func (t *Ins) getAsync(arg *getArgs, timer *time.Timer) {
 	err := t.get(arg)
 	arg.err <- err
 }
 
-func (t *Instance) get(arg *getArgs) error {
+func (t *Ins) get(arg *getArgs) error {
 	if arg.size > MaxGetBenchSize {
 		return ErrBenchSizeTooLarge.Trace(arg.size)
 	}
 
-	msgs := make([]*message.Message, arg.size)
+	msgs := make([]*message.Ins, arg.size)
 	var (
-		msg *message.Message
+		msg *message.Ins
 		err error
 	)
 
-	var header message.HeaderBin
+	var header message.Header
 
 	// check offset
 	r := &utils.Reader{t.file, arg.offset}
@@ -196,11 +196,11 @@ func (t *Instance) get(arg *getArgs) error {
 		p++
 	}
 
-	arg.reply <- msgs[:p]
+	arg.reply <- message.NewReplyCtx(t.Name, msgs[:p])
 	return err
 }
 
-func (t *Instance) addToWaiterList(w *Waiter) {
+func (t *Ins) addToWaiterList(w *Waiter) {
 	if t.waiterList.Len() == 0 {
 		t.waiterList.PushFront(w)
 		return
@@ -218,7 +218,7 @@ func (t *Instance) addToWaiterList(w *Waiter) {
 	}
 }
 
-func (t *Instance) addWaiter(arg *getArgs, offset int64, size int) {
+func (t *Ins) addWaiter(arg *getArgs, offset int64, size int) {
 	w := &Waiter{
 		offset: offset,
 		size:   arg.size,
@@ -230,7 +230,7 @@ func (t *Instance) addWaiter(arg *getArgs, offset int64, size int) {
 	t.addToWaiterList(w)
 }
 
-func (t *Instance) checkWaiter() {
+func (t *Ins) checkWaiter() {
 	offset := t.writer.Offset
 	var err error
 	for item := t.waiterList.Front(); item != nil; item = item.Next() {

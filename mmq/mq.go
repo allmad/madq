@@ -8,14 +8,14 @@ import (
 type Mmq struct {
 	defaultTopicConfig *topic.Config
 
-	topics map[string]*topic.Instance
+	topics map[string]*topic.Ins
 }
 
 func NewMmq(path string) (*Mmq, error) {
 	return nil, nil
 }
 
-func (m *Mmq) Put(topicName string, data []*message.Message) error {
+func (m *Mmq) Put(topicName string, data []*message.Ins) error {
 	return nil
 }
 

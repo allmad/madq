@@ -1,3 +1,0 @@
-test:
-  override:
-    - env GOPATH=/usr/local/go_workspace go test -v ./...

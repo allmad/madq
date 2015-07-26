@@ -38,7 +38,7 @@ func BenchmarkTopicGet(b *testing.B) {
 		}
 	}()
 	msg := message.NewMessageByData(message.NewMessageData([]byte(utils.RandString(256))))
-	var buffer []*message.Message
+	var buffer []*message.Ins
 	for i := 0; i < n; i++ {
 		buffer = append(buffer, msg)
 		if len(buffer) > MaxPutBenchSize {
@@ -51,7 +51,7 @@ func BenchmarkTopicGet(b *testing.B) {
 	close(replyErrs)
 
 	b.ResetTimer()
-	reply := make(chan []*message.Message, 1024)
+	reply := make(chan *message.ReplyCtx, 1024)
 
 	size := 0
 	off := int64(0)
@@ -59,11 +59,11 @@ func BenchmarkTopicGet(b *testing.B) {
 	go func() {
 		for msgs := range reply {
 			wg.Add(1)
-			for _, m := range msgs {
+			for _, m := range msgs.Msgs {
 				off += int64(len(m.Bytes()))
 				wg.Done()
 			}
-			size -= len(msgs)
+			size -= len(msgs.Msgs)
 			wg.Done()
 			if size == 0 {
 				continue
@@ -100,7 +100,7 @@ func BenchmarkTopicPut(b *testing.B) {
 		}
 	}()
 	b.ResetTimer()
-	buffer := []*message.Message{}
+	buffer := []*message.Ins{}
 	for i := 0; i < b.N; i++ {
 		m, _ := message.NewMessage(msg.Bytes(), true)
 		buffer = append(buffer, m)
@@ -126,14 +126,14 @@ func TestTopic(t *testing.T) {
 	}
 	wg.Add(len(testSource))
 	go func() {
-		incoming := make(chan []*message.Message, len(testSource))
+		incoming := make(chan *message.ReplyCtx, len(testSource))
 		errChan := make(chan error)
 		topic.Get(0, len(testSource), incoming, errChan)
 		idx := 0
 		for {
 			select {
 			case msg := <-incoming:
-				for _, m := range msg {
+				for _, m := range msg.Msgs {
 					if string(m.Data) != string(testSource[idx]) {
 						t.Error("result not except", string(m.Data))
 					}
@@ -148,7 +148,7 @@ func TestTopic(t *testing.T) {
 	go func() {
 		for _, m := range testSource {
 			msg := message.NewMessageByData(message.NewMessageData(m))
-			errs := topic.PutSync([]*message.Message{msg})
+			errs := topic.PutSync([]*message.Ins{msg})
 			logex.Error(errs)
 		}
 	}()

@@ -13,7 +13,7 @@ type Waiter struct {
 	offset  int64
 	size    int
 	oriSize int
-	reply   chan<- []*message.Message
+	reply   chan<- *message.ReplyCtx
 }
 
 func (w *Waiter) toGetArg(err chan<- error) *getArgs {

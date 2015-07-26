@@ -37,7 +37,7 @@ var (
 	}
 )
 
-type HeaderBin [SizeMsgHeader]byte
+type Header [SizeMsgHeader]byte
 
 const (
 	MagicByte, MagicByteV2 byte = 0x9a, 0x80
@@ -78,7 +78,7 @@ var (
 // +-------+--------+-------+-----+---------+------+
 // | 2     | 4      | 8     | 4   | 1       | ...  |
 // +-------+--------+-------+-----+---------+------+
-type Message struct {
+type Ins struct {
 	Length uint32
 
 	MsgId   uint64
@@ -89,18 +89,22 @@ type Message struct {
 	underlay []byte
 }
 
-type ReplyMsgCtx struct {
+type ReplyCtx struct {
 	Topic string
-	Msgs  []*Message
+	Msgs  []*Ins
 }
 
-func NewMessageByData(data *MessageData) *Message {
+func NewReplyCtx(name string, msgs []*Ins) *ReplyCtx {
+	return &ReplyCtx{name, msgs}
+}
+
+func NewMessageByData(data *Data) *Ins {
 	underlay := data.underlay
 	underlay[OffsetMsgVer] = byte(1)
 	h := crc32.NewIEEE()
 	h.Write(underlay[OffsetMsgVer:])
 
-	m := &Message{
+	m := &Ins{
 		Length:   uint32(len(underlay) - OffsetMsgBody),
 		Crc:      h.Sum32(),
 		Version:  1,
@@ -117,7 +121,7 @@ func NewMessageByData(data *MessageData) *Message {
 	return m
 }
 
-func ReadMessage(reuseBuf *HeaderBin, reader io.Reader, rf ReadFlag) (*Message, error) {
+func ReadMessage(reuseBuf *Header, reader io.Reader, rf ReadFlag) (*Ins, error) {
 	checksum := true
 	n, msg, err := readMessage(reuseBuf, reader, checksum)
 	if rf != RF_RESEEK_ON_FAULT || !logex.EqualAny(err, ErrReseekable) {
@@ -159,7 +163,7 @@ func ReadMessage(reuseBuf *HeaderBin, reader io.Reader, rf ReadFlag) (*Message, 
 	return nil, ErrReseekReachLimit.Trace()
 }
 
-func readMessage(reuseBuf *HeaderBin, r io.Reader, checksum bool) (int, *Message, error) {
+func readMessage(reuseBuf *Header, r io.Reader, checksum bool) (int, *Ins, error) {
 	header := reuseBuf[:]
 	var expectMsgId *uint64
 	if r, ok := r.(*utils.Reader); ok {
@@ -212,12 +216,12 @@ func ReadMessageHeader(buf []byte, lengthRef *uint32) (err error) {
 	return nil
 }
 
-func NewMessage(data []byte, checksum bool) (m *Message, err error) {
+func NewMessage(data []byte, checksum bool) (m *Ins, err error) {
 	if len(data) < OffsetMsgData {
 		return nil, ErrInvalidHeader.Format("short length")
 	}
 
-	m = &Message{
+	m = &Ins{
 		underlay: data,
 	}
 	if err := ReadMessageHeader(data[:SizeMsgHeader], &m.Length); err != nil {
@@ -247,36 +251,36 @@ func NewMessage(data []byte, checksum bool) (m *Message, err error) {
 	return m, nil
 }
 
-func (m *Message) Bytes() []byte {
+func (m *Ins) Bytes() []byte {
 	return m.underlay
 }
 
-func (m *Message) SetMsgId(id uint64) {
+func (m *Ins) SetMsgId(id uint64) {
 	m.MsgId = id
 	buf := m.underlay[OffsetMsgId:]
 	binary.LittleEndian.PutUint64(buf, m.MsgId)
 }
 
-func (m *Message) WriteTo(w io.Writer) (int, error) {
+func (m *Ins) WriteTo(w io.Writer) (int, error) {
 	return w.Write(m.underlay)
 }
 
-func (m *Message) String() string {
+func (m *Ins) String() string {
 	return fmt.Sprintf("%+v", *m)
 }
 
-type MessageData struct {
+type Data struct {
 	underlay []byte
 }
 
-func NewMessageData(b []byte) *MessageData {
-	m := &MessageData{
+func NewMessageData(b []byte) *Data {
+	m := &Data{
 		underlay: make([]byte, len(b)+OffsetMsgData),
 	}
 	copy(m.underlay[OffsetMsgData:], b)
 	return m
 }
 
-func (m *MessageData) Bytes() []byte {
+func (m *Data) Bytes() []byte {
 	return m.underlay[OffsetMsgData:]
 }

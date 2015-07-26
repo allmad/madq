@@ -15,7 +15,7 @@ import (
 
 var (
 	m           sync.RWMutex
-	topics      = map[string]*topic.Instance{}
+	topics      = map[string]*topic.Ins{}
 	topicConfig *topic.Config
 )
 
@@ -27,7 +27,7 @@ func init() {
 	os.RemoveAll(topicConfig.Root)
 }
 
-func getTopic(name string) (t *topic.Instance, err error) {
+func getTopic(name string) (t *topic.Ins, err error) {
 	m.RLock()
 	t, ok := topics[name]
 	m.RUnlock()
@@ -58,9 +58,9 @@ func pubHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	var (
-		msg    *message.Message
-		header message.HeaderBin
-		msgs   = make([]*message.Message, 0, size)
+		msg    *message.Ins
+		header message.Header
+		msgs   = make([]*message.Ins, 0, size)
 	)
 	for !logex.Equal(err, io.EOF) {
 		msg, err = message.ReadMessage(&header, req.Body, message.RF_DEFAULT)
