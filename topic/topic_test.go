@@ -1,6 +1,7 @@
 package topic
 
 import (
+	"bytes"
 	"os"
 	"sync"
 	"testing"
@@ -110,6 +111,71 @@ func BenchmarkTopicPut(b *testing.B) {
 		}
 	}
 	wg.Wait()
+}
+
+func TestTopicCancel(t *testing.T) {
+	topic, err := New("topicCancel", c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	var testSource = [][]byte{
+		[]byte("helo"),
+		[]byte("who are kkk"),
+		[]byte("kjkj"),
+	}
+	incoming := make(chan *message.ReplyCtx, len(testSource))
+	incoming2 := make(chan *message.ReplyCtx, len(testSource))
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := topic.GetSync(0, len(testSource), incoming); err != nil {
+			logex.Error(err)
+			t.Error(err)
+			return
+		}
+		msg := <-incoming
+		off := msg.Msgs[0].NextOff()
+		if err := topic.GetSync(off, len(testSource), incoming2); err != nil {
+			logex.Error(err)
+			t.Error(err)
+			return
+		}
+		<-incoming2 // empty
+	}()
+	errs := topic.PutSync([]*message.Ins{message.NewMessageByData(
+		message.NewMessageData(testSource[0]),
+	)})
+	if errs[0] != nil {
+		t.Fatal(err)
+		return
+	}
+	wg.Wait()
+	if err := topic.Cancel(0, len(testSource), incoming); err != nil {
+		t.Fatal(err)
+	}
+	if errs := topic.PutSync([]*message.Ins{message.NewMessageByData(
+		message.NewMessageData(testSource[1]),
+	)}); errs[0] != nil {
+		t.Fatal(err)
+		return
+	}
+
+	select {
+	case msg := <-incoming2:
+		if !bytes.Equal(msg.Msgs[0].Data, testSource[1]) {
+			t.Fatal("result not expect")
+		}
+	}
+
+	select {
+	case msg := <-incoming:
+		logex.Struct(msg)
+		t.Fatal("must not come from incoming1")
+	default:
+	}
+
 }
 
 func TestTopic(t *testing.T) {

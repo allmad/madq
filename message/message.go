@@ -89,6 +89,7 @@ type Ins struct {
 }
 
 type ReplyChan chan<- *ReplyCtx
+type Chan chan *ReplyCtx
 
 type ReplyCtx struct {
 	Topic string
@@ -112,7 +113,6 @@ func NewMessageByData(data *Data) *Ins {
 		Data:     data.Bytes(),
 		underlay: underlay,
 	}
-	logex.Info(data.Bytes())
 
 	copy(underlay, MagicBytes)
 	binary.LittleEndian.PutUint32(underlay[OffsetMsgLength:], m.Length)
@@ -250,6 +250,10 @@ func NewMessage(data []byte, checksum bool) (m *Ins, err error) {
 	}
 
 	return m, nil
+}
+
+func (m *Ins) NextOff() int64 {
+	return int64(len(m.underlay)) + int64(m.MsgId)
 }
 
 func (m *Ins) Bytes() []byte {

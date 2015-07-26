@@ -13,7 +13,22 @@ type Waiter struct {
 	offset  int64
 	size    int
 	oriSize int
-	reply   chan<- *message.ReplyCtx
+	reply   message.ReplyChan
+}
+
+func newWaiter(arg *getArgs, offset int64, size int) *Waiter {
+	return &Waiter{
+		offset: offset,
+		size:   arg.size,
+		reply:  arg.reply,
+
+		oriOff:  arg.oriOff,
+		oriSize: arg.oriSize,
+	}
+}
+
+func (w *Waiter) Equal(get *getArgs) bool {
+	return get.oriOff == w.oriOff && get.oriSize == w.oriSize && get.reply == w.reply
 }
 
 func (w *Waiter) toGetArg(err chan<- error) *getArgs {

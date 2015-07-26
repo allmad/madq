@@ -1,7 +1,6 @@
 package topic
 
 import (
-	"container/list"
 	"fmt"
 	"io"
 	"time"
@@ -18,8 +17,9 @@ const (
 )
 
 var (
-	ErrBenchSizeTooLarge = logex.Define("bench size is too large")
-	ErrNeedAddToWaiter   = []error{
+	ErrSubscriberNotFound = logex.Define("subscriber for %v is not found")
+	ErrBenchSizeTooLarge  = logex.Define("bench size is too large")
+	ErrNeedAddToWaiter    = []error{
 		io.ErrUnexpectedEOF, io.EOF,
 	}
 )
@@ -41,21 +41,23 @@ type Ins struct {
 	writer *utils.Writer
 
 	// linked list for Waiters
-	waiterList *list.List
+	waiterList *utils.List
 
-	newMsgChan chan struct{}
 	putChan    chan *putArgs
 	getChan    chan *getArgs
+	checkChan  chan struct{}
+	cancelChan chan *getArgs
 }
 
 func New(name string, config *Config) (t *Ins, err error) {
 	t = &Ins{
 		config:     config,
 		Name:       name,
-		waiterList: list.New(),
-		newMsgChan: make(chan struct{}, 1),
+		waiterList: utils.NewList(),
 		putChan:    make(chan *putArgs, 1<<3),
 		getChan:    make(chan *getArgs, 1<<3),
+		cancelChan: make(chan *getArgs),
+		checkChan:  make(chan struct{}, 1),
 	}
 	path := config.Path(t.nameEncoded())
 	t.file, err = bitmap.NewFileEx(path, config.ChunkBit)
@@ -83,28 +85,45 @@ func (t *Ins) ioLoop() {
 	for {
 		select {
 		case put, ok = <-t.putChan:
+			if !ok {
+				break
+			}
 			goto put
 		case get, ok = <-t.getChan:
+			if !ok {
+				break
+			}
 			goto get
-		}
-		if !ok {
-			break
+		case _, ok = <-t.checkChan:
+			if !ok {
+				break
+			}
+			goto check
+		case get, ok = <-t.cancelChan:
+			if !ok {
+				break
+			}
+			goto cancel
 		}
 
 	put:
-		if !ok {
-			break
-		}
 		t.put(put, timer)
-		t.checkWaiter()
+		select {
+		case t.checkChan <- struct{}{}:
+		default:
+		}
 		continue
 
 	get:
-		if !ok {
-			break
-		}
-
 		t.getAsync(get, timer)
+		continue
+
+	check:
+		t.checkWaiter()
+		continue
+
+	cancel:
+		t.doCancel(get)
 		continue
 	}
 }
@@ -136,12 +155,16 @@ func (t *Ins) put(arg *putArgs, timer *time.Timer) {
 type getArgs struct {
 	offset int64
 	size   int
-	reply  chan<- *message.ReplyCtx
+	reply  message.ReplyChan
 	err    chan<- error
 
 	// context
 	oriOff  int64
 	oriSize int
+}
+
+func (g *getArgs) String() string {
+	return fmt.Sprintf("%v:%v", g.offset, g.size)
 }
 
 func (t *Ins) GetSync(offset int64, size int, reply message.ReplyChan) error {
@@ -158,11 +181,11 @@ func (t *Ins) Get(offset int64, size int, reply message.ReplyChan, err chan<- er
 }
 
 func (t *Ins) getAsync(arg *getArgs, timer *time.Timer) {
-	err := t.get(arg)
+	err := t.get(arg, true)
 	arg.err <- err
 }
 
-func (t *Ins) get(arg *getArgs) error {
+func (t *Ins) get(arg *getArgs, mustReply bool) error {
 	if arg.size > MaxGetBenchSize {
 		return ErrBenchSizeTooLarge.Trace(arg.size)
 	}
@@ -183,7 +206,7 @@ func (t *Ins) get(arg *getArgs) error {
 		err = logex.Trace(err, i)
 		if logex.EqualAny(err, ErrNeedAddToWaiter) {
 			// not finish, add to waiterList
-			t.addWaiter(arg, r.Offset, p)
+			t.addToWaiterList(newWaiter(arg, r.Offset, p))
 			break
 		}
 		if err != nil {
@@ -193,7 +216,12 @@ func (t *Ins) get(arg *getArgs) error {
 		p++
 	}
 
-	arg.reply <- message.NewReplyCtx(t.Name, msgs[:p])
+	if mustReply || p > 0 {
+		arg.reply <- message.NewReplyCtx(t.Name, msgs[:p])
+	}
+	if logex.Equal(err, io.EOF) {
+		err = nil
+	}
 	return err
 }
 
@@ -215,16 +243,27 @@ func (t *Ins) addToWaiterList(w *Waiter) {
 	}
 }
 
-func (t *Ins) addWaiter(arg *getArgs, offset int64, size int) {
-	w := &Waiter{
-		offset: offset,
-		size:   arg.size,
-		reply:  arg.reply,
-
-		oriOff:  arg.oriOff,
-		oriSize: arg.oriSize,
+func (t *Ins) Cancel(offset int64, size int, reply message.ReplyChan) error {
+	errChan := make(chan error)
+	t.cancelChan <- &getArgs{
+		err:     errChan,
+		oriSize: size,
+		reply:   reply,
+		oriOff:  offset,
 	}
-	t.addToWaiterList(w)
+	return <-errChan
+}
+
+func (t *Ins) doCancel(get *getArgs) {
+	for item := t.waiterList.Front(); item != nil; item = item.Next() {
+		waiter := item.Value.(*Waiter)
+		if waiter.Equal(get) {
+			t.waiterList.Remove(item)
+			get.err <- nil
+			return
+		}
+	}
+	get.err <- ErrSubscriberNotFound.Format(get.String())
 }
 
 func (t *Ins) checkWaiter() {
@@ -237,7 +276,7 @@ func (t *Ins) checkWaiter() {
 		}
 
 		t.waiterList.Remove(item)
-		err = t.get(waiter.toGetArg(nil))
+		err = t.get(waiter.toGetArg(nil), false)
 		if err != nil {
 			logex.Error(err)
 		}
