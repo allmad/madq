@@ -136,7 +136,7 @@ func TestTopicCancel(t *testing.T) {
 			return
 		}
 		msg := <-incoming
-		if len(msg.Megs) == 0 {
+		if len(msg.Msgs) == 0 {
 			// reget
 			msg = <-incoming
 		}
