@@ -30,25 +30,19 @@ func BenchmarkTopicGet(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	var wg2 sync.WaitGroup
-	replyErrs := make(chan []error)
-	go func() {
-		for _ = range replyErrs {
-			wg2.Done()
-		}
-	}()
-	msg := message.NewMessageByData(message.NewMessageData([]byte(utils.RandString(256))))
+	data := message.NewData([]byte(utils.RandString(256)))
+
+	msg := message.NewByData(data)
 	var buffer []*message.Ins
 	for i := 0; i < n; i++ {
 		buffer = append(buffer, msg)
 		if len(buffer) > MaxPutBenchSize {
-			wg2.Add(1)
-			topic.Put(buffer, replyErrs)
+			if _, err := topic.PutSync(buffer); err != nil {
+				b.Fatal(err)
+			}
 			buffer = nil
 		}
 	}
-	wg2.Wait()
-	close(replyErrs)
 
 	b.ResetTimer()
 	reply := make(chan *message.Reply, 1024)
@@ -91,26 +85,19 @@ func BenchmarkTopicPut(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	msg := message.NewMessageByData(message.NewMessageData([]byte(utils.RandString(256))))
-	reply := make(chan []error)
-	var wg sync.WaitGroup
-	go func() {
-		for _ = range reply {
-			wg.Done()
-		}
-	}()
+	msg := message.NewByData(message.NewData([]byte(utils.RandString(256))))
 	b.ResetTimer()
 	buffer := []*message.Ins{}
 	for i := 0; i < b.N; i++ {
-		m, _ := message.NewMessage(msg.Bytes(), true)
+		m, _ := message.New(msg.Bytes())
 		buffer = append(buffer, m)
 		if len(buffer) >= MaxPutBenchSize {
-			wg.Add(1)
-			topic.Put(buffer, reply)
+			if _, err := topic.PutSync(buffer); err != nil {
+				b.Fatal(err)
+			}
 			buffer = nil
 		}
 	}
-	wg.Wait()
 }
 
 func TestTopicCancel(t *testing.T) {
@@ -148,10 +135,9 @@ func TestTopicCancel(t *testing.T) {
 		}
 		<-incoming2 // empty
 	}()
-	errs := topic.PutSync([]*message.Ins{message.NewMessageByData(
-		message.NewMessageData(testSource[0]),
-	)})
-	if errs[0] != nil {
+	if _, err := topic.PutSync([]*message.Ins{message.NewByData(
+		message.NewData(testSource[0]),
+	)}); err != nil {
 		t.Fatal(err)
 		return
 	}
@@ -159,9 +145,9 @@ func TestTopicCancel(t *testing.T) {
 	if err := topic.Cancel(0, len(testSource), incoming); err != nil {
 		t.Fatal(err)
 	}
-	if errs := topic.PutSync([]*message.Ins{message.NewMessageByData(
-		message.NewMessageData(testSource[1]),
-	)}); errs[0] != nil {
+	if _, err := topic.PutSync([]*message.Ins{message.NewByData(
+		message.NewData(testSource[1]),
+	)}); err != nil {
 		t.Fatal(err)
 		return
 	}
@@ -216,9 +202,10 @@ func TestTopic(t *testing.T) {
 	}()
 	go func() {
 		for _, m := range testSource {
-			msg := message.NewMessageByData(message.NewMessageData(m))
-			errs := topic.PutSync([]*message.Ins{msg})
-			logex.Error(errs)
+			msg := message.NewByData(message.NewData(m))
+			if _, err := topic.PutSync([]*message.Ins{msg}); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}()
 	wg.Wait()

@@ -15,7 +15,7 @@ func BenchmarkHttpPut(b *testing.B) {
 	var data []byte
 	batch := 200
 	for i := 0; i < batch; i++ {
-		msg := message.NewMessageByData(message.NewMessageData([]byte(utils.RandString(200))))
+		msg := message.NewByData(message.NewData([]byte(utils.RandString(200))))
 		data = append(data, msg.Bytes()...)
 	}
 	r := bytes.NewReader(data)

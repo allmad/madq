@@ -80,6 +80,9 @@ func (t *Ins) nameEncoded() string {
 
 func (t *Ins) Close() {
 	close(t.stopChan)
+}
+
+func (t *Ins) Wait() {
 	t.wg.Wait()
 }
 
@@ -152,26 +155,38 @@ func (t *Ins) ioLoop() {
 
 type putArgs struct {
 	msgs  []*message.Ins
-	reply chan<- []error
+	reply chan<- *putError
 }
 
-func (t *Ins) PutSync(msgs []*message.Ins) []error {
-	reply := make(chan []error)
+type putError struct {
+	n   int
+	err error
+}
+
+func (t *Ins) PutSync(msgs []*message.Ins) (int, error) {
+	reply := make(chan *putError)
 	t.Put(msgs, reply)
-	return <-reply
+	ret := <-reply
+	return ret.n, ret.err
 }
 
-func (t *Ins) Put(msgs []*message.Ins, reply chan []error) {
+func (t *Ins) Put(msgs []*message.Ins, reply chan *putError) {
 	t.putChan <- &putArgs{msgs, reply}
 }
 
 func (t *Ins) put(arg *putArgs, timer *time.Timer) {
-	errs := make([]error, len(arg.msgs))
-	for i := 0; i < len(arg.msgs); i++ {
+	var (
+		err error
+		i   int
+	)
+	for ; i < len(arg.msgs); i++ {
 		arg.msgs[i].SetMsgId(uint64(t.writer.Offset))
-		_, errs[i] = arg.msgs[i].WriteTo(t.writer)
+		_, err = arg.msgs[i].WriteTo(t.writer)
+		if err != nil {
+			break
+		}
 	}
-	arg.reply <- errs
+	arg.reply <- &putError{i, err}
 }
 
 type getArgs struct {
@@ -224,7 +239,7 @@ func (t *Ins) get(arg *getArgs, mustReply bool) error {
 	r := &utils.Reader{t.file, arg.offset}
 	p := 0
 	for i := 0; i < arg.size; i++ {
-		msg, err = message.ReadMessage(&header, r, message.RF_RESEEK_ON_FAULT)
+		msg, err = message.Read(&header, r, message.RF_RESEEK_ON_FAULT)
 		err = logex.Trace(err, i)
 		if logex.EqualAny(err, ErrNeedAddToWaiter) {
 			// not finish, add to waiterList

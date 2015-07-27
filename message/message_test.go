@@ -9,25 +9,25 @@ import (
 )
 
 func BenchmarkNewMessageByData(b *testing.B) {
-	source := NewMessageData([]byte(utils.RandString(256)))
+	source := NewData([]byte(utils.RandString(256)))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		NewMessageByData(source)
+		NewByData(source)
 	}
 }
 
 func BenchmarkNewMessageRaw256(b *testing.B) {
-	m := NewMessageByData(NewMessageData([]byte(utils.RandString(256))))
+	m := NewByData(NewData([]byte(utils.RandString(256))))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		NewMessage(m.underlay, false)
+		New(m.underlay)
 	}
 }
 
 func TestMessage(t *testing.T) {
-	m := NewMessageByData(NewMessageData([]byte("hello")))
+	m := NewByData(NewData([]byte("hello")))
 	{
-		m2, err := NewMessage(m.underlay, true)
+		m2, err := New(m.underlay)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -38,7 +38,7 @@ func TestMessage(t *testing.T) {
 	}
 	var header Header
 	{
-		m3, err := ReadMessage(&header, utils.NewReaderBuf(m.underlay), RF_DEFAULT)
+		m3, err := Read(&header, utils.NewReaderBuf(m.underlay), RF_DEFAULT)
 		if err != nil {
 			logex.Error(err)
 			t.Fatal(err)
@@ -53,7 +53,7 @@ func TestMessage(t *testing.T) {
 		prefix := []byte("hello")
 		m.SetMsgId(uint64(len(prefix)))
 		buf := utils.NewReaderBuf(append(prefix, m.underlay...))
-		m4, err := ReadMessage(&header, buf, RF_RESEEK_ON_FAULT)
+		m4, err := Read(&header, buf, RF_RESEEK_ON_FAULT)
 		if err != nil {
 			logex.Error(err)
 			t.Fatal(err)
@@ -71,7 +71,7 @@ func TestMessage(t *testing.T) {
 		m.SetMsgId(uint64(len(bin)))
 		bin = append(bin, m.underlay...)
 		buf := utils.NewReaderBuf(bin)
-		m5, err := ReadMessage(&header, buf, RF_RESEEK_ON_FAULT)
+		m5, err := Read(&header, buf, RF_RESEEK_ON_FAULT)
 		if err != nil {
 			logex.Error(err)
 			t.Fatal(err)

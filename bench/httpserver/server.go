@@ -63,7 +63,7 @@ func pubHandler(w http.ResponseWriter, req *http.Request) {
 		msgs   = make([]*message.Ins, 0, size)
 	)
 	for !logex.Equal(err, io.EOF) {
-		msg, err = message.ReadMessage(&header, req.Body, message.RF_DEFAULT)
+		msg, err = message.Read(&header, req.Body, message.RF_DEFAULT)
 		if err != nil {
 			break
 		}

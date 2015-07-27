@@ -4,9 +4,10 @@ import (
 	"bufio"
 	"encoding/binary"
 	"fmt"
-	"hash/crc32"
 	"io"
 	"math"
+
+	"github.com/klauspost/crc32"
 
 	"github.com/chzyer/muxque/internal/utils"
 	"gopkg.in/logex.v1"
@@ -100,7 +101,7 @@ func NewReplyCtx(name string, msgs []*Ins) *Reply {
 	return &Reply{name, msgs}
 }
 
-func NewMessageByData(data *Data) *Ins {
+func NewByData(data *Data) *Ins {
 	underlay := data.underlay
 	underlay[OffsetMsgVer] = byte(1)
 	h := crc32.NewIEEE()
@@ -122,9 +123,8 @@ func NewMessageByData(data *Data) *Ins {
 	return m
 }
 
-func ReadMessage(reuseBuf *Header, reader io.Reader, rf ReadFlag) (*Ins, error) {
-	checksum := true
-	n, msg, err := readMessage(reuseBuf, reader, checksum)
+func Read(reuseBuf *Header, reader io.Reader, rf ReadFlag) (*Ins, error) {
+	n, msg, err := read(reuseBuf, reader)
 	if rf != RF_RESEEK_ON_FAULT || !logex.EqualAny(err, ErrReseekable) {
 		return msg, logex.Trace(err)
 	}
@@ -153,18 +153,18 @@ func ReadMessage(reuseBuf *Header, reader io.Reader, rf ReadFlag) (*Ins, error) 
 
 		offset = offset + skiped - 1
 		r.Offset = offset
-		n, msg, err = readMessage(reuseBuf, r, checksum)
+		n, msg, err = read(reuseBuf, r)
 		if !logex.EqualAny(err, ErrReseekable) {
 			return msg, logex.Trace(err)
 		}
 		r.Offset -= int64(n)
-		buf = bufio.NewReader(r)
+		buf.Reset(r)
 		continue
 	}
 	return nil, ErrReseekReachLimit.Trace()
 }
 
-func readMessage(reuseBuf *Header, r io.Reader, checksum bool) (int, *Ins, error) {
+func read(reuseBuf *Header, r io.Reader) (int, *Ins, error) {
 	header := reuseBuf[:]
 	var expectMsgId *uint64
 	if r, ok := r.(*utils.Reader); ok {
@@ -179,7 +179,7 @@ func readMessage(reuseBuf *Header, r io.Reader, checksum bool) (int, *Ins, error
 	}
 
 	var length uint32
-	if err := ReadMessageHeader(header, &length); err != nil {
+	if err := ReadHeader(header, &length); err != nil {
 		return n, nil, logex.Trace(err)
 	}
 
@@ -191,7 +191,7 @@ func readMessage(reuseBuf *Header, r io.Reader, checksum bool) (int, *Ins, error
 	}
 
 	copy(content, header)
-	m, err := NewMessage(content, checksum)
+	m, err := New(content)
 	if err != nil {
 		return nRead, nil, logex.Trace(err)
 	}
@@ -201,7 +201,7 @@ func readMessage(reuseBuf *Header, r io.Reader, checksum bool) (int, *Ins, error
 	return nRead, m, nil
 }
 
-func ReadMessageHeader(buf []byte, lengthRef *uint32) (err error) {
+func ReadHeader(buf []byte, lengthRef *uint32) (err error) {
 	if len(buf) < SizeMsgHeader {
 		return ErrInvalidLength.Trace(len(buf))
 	}
@@ -217,7 +217,7 @@ func ReadMessageHeader(buf []byte, lengthRef *uint32) (err error) {
 	return nil
 }
 
-func NewMessage(data []byte, checksum bool) (m *Ins, err error) {
+func New(data []byte) (m *Ins, err error) {
 	if len(data) < OffsetMsgData {
 		return nil, ErrInvalidHeader.Format("short length")
 	}
@@ -225,7 +225,7 @@ func NewMessage(data []byte, checksum bool) (m *Ins, err error) {
 	m = &Ins{
 		underlay: data,
 	}
-	if err := ReadMessageHeader(data[:SizeMsgHeader], &m.Length); err != nil {
+	if err := ReadHeader(data[:SizeMsgHeader], &m.Length); err != nil {
 		return nil, logex.Trace(err)
 	}
 
@@ -233,12 +233,10 @@ func NewMessage(data []byte, checksum bool) (m *Ins, err error) {
 	m.MsgId = binary.LittleEndian.Uint64(data[OffsetMsgId:])
 	m.Crc = binary.LittleEndian.Uint32(data[OffsetMsgCrc:])
 
-	if checksum {
-		h := crc32.NewIEEE()
-		h.Write(data[OffsetMsgCrcCheck:])
-		if m.Crc != h.Sum32() {
-			return nil, ErrChecksumNotMatch.Trace(m.Crc, h.Sum32())
-		}
+	h := crc32.NewIEEE()
+	h.Write(data[OffsetMsgCrcCheck:])
+	if m.Crc != h.Sum32() {
+		return nil, ErrChecksumNotMatch.Trace(m.Crc, h.Sum32())
 	}
 
 	m.Version = uint8(data[OffsetMsgVer])
@@ -278,7 +276,7 @@ type Data struct {
 	underlay []byte
 }
 
-func NewMessageData(b []byte) *Data {
+func NewData(b []byte) *Data {
 	m := &Data{
 		underlay: make([]byte, len(b)+OffsetMsgData),
 	}

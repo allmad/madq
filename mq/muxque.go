@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/chzyer/muxque/message"
+	"github.com/chzyer/muxque/prot"
 	"github.com/chzyer/muxque/topic"
 	"gopkg.in/logex.v1"
 )
@@ -47,16 +48,17 @@ func (m *Muxque) getTopic(name string) (*topic.Ins, error) {
 	return ins, nil
 }
 
-func (m *Muxque) PutSync(topicName string, data []*message.Ins) ([]error, error) {
+func (m *Muxque) PutSync(topicName string, data []*message.Ins) (int, error) {
 	t, err := m.getTopic(topicName)
 	if err != nil {
-		return nil, logex.Trace(err)
+		return 0, logex.Trace(err)
 	}
-	return t.PutSync(data), nil
+	n, err := t.PutSync(data)
+	return n, logex.Trace(err)
 }
 
-func (m *Muxque) GetSync(topicName string, offset int64, size int, reply message.ReplyChan) error {
-	t, err := m.getTopic(topicName)
+func (m *Muxque) GetSync(topicName *prot.String, offset int64, size int, reply message.ReplyChan) error {
+	t, err := m.getTopic(topicName.String())
 	if err != nil {
 		return logex.Trace(err)
 	}
@@ -76,5 +78,8 @@ func (m *Muxque) Close() {
 	defer m.Unlock()
 	for _, t := range m.topics {
 		t.Close()
+	}
+	for _, t := range m.topics {
+		t.Wait()
 	}
 }
