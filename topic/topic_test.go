@@ -136,6 +136,10 @@ func TestTopicCancel(t *testing.T) {
 			return
 		}
 		msg := <-incoming
+		if len(msg.Megs) == 0 {
+			// reget
+			msg = <-incoming
+		}
 		off := msg.Msgs[0].NextOff()
 		if err := topic.GetSync(off, len(testSource), incoming2); err != nil {
 			logex.Error(err)
