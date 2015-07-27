@@ -3,6 +3,7 @@ package topic
 import (
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/chzyer/muxque/internal/bitmap"
@@ -43,6 +44,8 @@ type Ins struct {
 	// linked list for Waiters
 	waiterList *utils.List
 
+	stopChan   chan struct{}
+	wg         sync.WaitGroup
 	putChan    chan *putArgs
 	getChan    chan *getArgs
 	checkChan  chan struct{}
@@ -58,6 +61,7 @@ func New(name string, config *Config) (t *Ins, err error) {
 		getChan:    make(chan *getArgs, 1<<3),
 		cancelChan: make(chan *getArgs),
 		checkChan:  make(chan struct{}, 1),
+		stopChan:   make(chan struct{}),
 	}
 	path := config.Path(t.nameEncoded())
 	t.file, err = bitmap.NewFileEx(path, config.ChunkBit)
@@ -74,7 +78,14 @@ func (t *Ins) nameEncoded() string {
 	return utils.PathEncode(t.Name)
 }
 
+func (t *Ins) Close() {
+	close(t.stopChan)
+	t.wg.Wait()
+}
+
 func (t *Ins) ioLoop() {
+	t.wg.Add(1)
+	defer t.wg.Done()
 	var (
 		put *putArgs
 		get *getArgs
@@ -85,14 +96,8 @@ func (t *Ins) ioLoop() {
 	for {
 		select {
 		case put, ok = <-t.putChan:
-			if !ok {
-				break
-			}
 			goto put
 		case get, ok = <-t.getChan:
-			if !ok {
-				break
-			}
 			goto get
 		case _, ok = <-t.checkChan:
 			if !ok {
@@ -104,9 +109,14 @@ func (t *Ins) ioLoop() {
 				break
 			}
 			goto cancel
+		case <-t.stopChan:
+			goto exit
 		}
 
 	put:
+		if !ok {
+			break
+		}
 		t.put(put, timer)
 		select {
 		case t.checkChan <- struct{}{}:
@@ -115,16 +125,28 @@ func (t *Ins) ioLoop() {
 		continue
 
 	get:
+		if !ok {
+			break
+		}
 		t.getAsync(get, timer)
 		continue
 
 	check:
+		if !ok {
+			break
+		}
 		t.checkWaiter()
 		continue
 
 	cancel:
+		if !ok {
+			break
+		}
 		t.doCancel(get)
 		continue
+
+	exit:
+		break
 	}
 }
 

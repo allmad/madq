@@ -70,3 +70,11 @@ func (m *Muxque) CancelSync(topicName string, offset int64, size int, reply mess
 	}
 	return logex.Trace(t.Cancel(offset, size, reply))
 }
+
+func (m *Muxque) Close() {
+	m.Lock()
+	defer m.Unlock()
+	for _, t := range m.topics {
+		t.Close()
+	}
+}
