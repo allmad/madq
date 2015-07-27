@@ -88,16 +88,16 @@ type Ins struct {
 	underlay []byte
 }
 
-type ReplyChan chan<- *ReplyCtx
-type Chan chan *ReplyCtx
+type ReplyChan chan<- *Reply
+type Chan chan *Reply
 
-type ReplyCtx struct {
+type Reply struct {
 	Topic string
 	Msgs  []*Ins
 }
 
-func NewReplyCtx(name string, msgs []*Ins) *ReplyCtx {
-	return &ReplyCtx{name, msgs}
+func NewReplyCtx(name string, msgs []*Ins) *Reply {
+	return &Reply{name, msgs}
 }
 
 func NewMessageByData(data *Data) *Ins {
