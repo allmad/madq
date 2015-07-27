@@ -1,7 +1,7 @@
 # Multiplex Message Queue
 
 [![Build Status](https://travis-ci.org/chzyer/muxque.svg?branch=master)](https://travis-ci.org/chzyer/muxque)
-[![Coverage Status](https://coveralls.io/repos/chzyer/muxque/badge.svg?branch=master)](https://coveralls.io/r/chzyer/muxque?branch=master)
+[![Coverage Status](https://coveralls.io/repos/chzyer/muxque/badge.svg?branch=master&service=github)](https://coveralls.io/github/chzyer/muxque?branch=master)
 [![Software License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE.md)
 
 muxque is design to use in IM, follows pub/sub model, to achieve serve millions users by multiplex sockets.
