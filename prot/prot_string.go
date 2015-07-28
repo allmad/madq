@@ -19,12 +19,20 @@ func (s *String) String() string {
 	return string(s.underlay)
 }
 
+func (s *String) Bytes() []byte {
+	return s.underlay
+}
+
 func ReadString(r io.Reader) (*String, error) {
 	var s String
 	if err := readItem(r, &s); err != nil {
 		return nil, logex.Trace(err)
 	}
 	return &s, nil
+}
+
+func (i *String) PSet(r io.Reader) error {
+	return logex.Trace(readItem(r, i))
 }
 
 func (i *String) Flag() byte {

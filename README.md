@@ -1,4 +1,4 @@
-# Multiplex Message Queue
+# Muxque (WIP)
 
 [![Build Status](https://travis-ci.org/chzyer/muxque.svg?branch=master)](https://travis-ci.org/chzyer/muxque)
 [![Software License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE.md)

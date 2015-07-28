@@ -23,6 +23,10 @@ func ReadInt64(r io.Reader) (o *Int64, err error) {
 	return &s, nil
 }
 
+func (i *Int64) PSet(r io.Reader) error {
+	return logex.Trace(readItem(r, i))
+}
+
 func (i *Int64) Flag() byte {
 	return FlagInt64
 }

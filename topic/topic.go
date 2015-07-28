@@ -181,7 +181,7 @@ func (p *PutError) PRead(r io.Reader) (err error) {
 		return logex.Trace(err)
 	}
 	p.N = pn.Int()
-	p.Err = perr
+	p.Err = perr.Err()
 	return nil
 }
 

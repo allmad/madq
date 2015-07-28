@@ -30,6 +30,7 @@ type ItemStruct interface {
 
 type Item interface {
 	ItemStruct
+	PSet(r io.Reader) error
 	Flag() byte
 }
 

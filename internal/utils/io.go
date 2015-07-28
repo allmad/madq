@@ -3,12 +3,28 @@ package utils
 import (
 	"bytes"
 	"io"
+	"sync/atomic"
 
 	"gopkg.in/logex.v1"
 )
 
 var (
 	ErrSeekNotSupport = logex.Define("seek with whence(2) is not supported")
+)
+
+type State uint32
+
+func (s *State) IsClosed() bool {
+	return atomic.LoadUint32((*uint32)(s)) == uint32(CloseState)
+}
+
+func (s *State) ToClose() bool {
+	return atomic.CompareAndSwapUint32((*uint32)(s), uint32(InitState), uint32(CloseState))
+}
+
+const (
+	InitState State = iota
+	CloseState
 )
 
 type Buffer struct {

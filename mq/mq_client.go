@@ -8,8 +8,8 @@ import (
 	"net"
 	"strings"
 	"sync"
-	"sync/atomic"
 
+	"github.com/chzyer/muxque/internal/utils"
 	"github.com/chzyer/muxque/message"
 	"github.com/chzyer/muxque/prot"
 	"github.com/chzyer/muxque/topic"
@@ -45,21 +45,6 @@ func (c *Context) String() string {
 	return fmt.Sprintf("%s:%d:%d", c.Name, c.Offset, c.Size)
 }
 
-type State uint32
-
-func (s *State) IsClosed() bool {
-	return atomic.LoadUint32((*uint32)(s)) == uint32(CloseState)
-}
-
-func (s *State) ToClose() bool {
-	return atomic.CompareAndSwapUint32((*uint32)(s), uint32(InitState), uint32(CloseState))
-}
-
-const (
-	InitState State = iota
-	CloseState
-)
-
 type Client struct {
 	methods    []*Method
 	que        *Muxque
@@ -67,7 +52,7 @@ type Client struct {
 	subscriber map[string]*Context
 	incoming   chan *topic.Reply
 	wg         sync.WaitGroup
-	state      State
+	state      utils.State
 	stopChan   chan struct{}
 	errChan    chan error
 	putErrChan chan *topic.PutError
@@ -79,7 +64,7 @@ func NewClient(que *Muxque, conn net.Conn) *Client {
 		incoming:   make(topic.Chan),
 		que:        que,
 		conn:       conn,
-		state:      InitState,
+		state:      utils.InitState,
 		stopChan:   make(chan struct{}),
 		errChan:    make(chan error, 1<<3),
 		putErrChan: make(chan *topic.PutError, 1<<3),
@@ -133,6 +118,9 @@ func (c *Client) writeLoop() {
 		}
 
 		err = prot.WriteReply(w, args)
+		if err == nil {
+			err = logex.Trace(w.Flush())
+		}
 		if err != nil {
 			logex.Error(err)
 			return
@@ -149,11 +137,21 @@ func (c *Client) readLoop() {
 	}()
 
 	var (
-		err    error
-		method []byte
+		err        error
+		method     []byte
+		packetType byte
 	)
 
 	for !c.state.IsClosed() {
+		packetType, err = buffer.ReadByte()
+		if err != nil {
+			logex.Error(err)
+			return
+		}
+		if packetType != prot.FlagReq {
+			logex.Error("unexpect packetType:", packetType)
+			return
+		}
 		method, err = buffer.ReadSlice('\n')
 		if err != nil {
 			if !logex.Equal(err, io.EOF) {

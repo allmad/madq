@@ -18,6 +18,10 @@ func (s *Struct) Flag() byte {
 	return FlagStruct
 }
 
+func (s *Struct) PSet(r io.Reader) error {
+	return logex.Trace(readItem(r, s))
+}
+
 func (s *Struct) PRead(r io.Reader) error {
 	return logex.Trace(s.underlay.PRead(r))
 }

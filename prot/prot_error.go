@@ -1,7 +1,6 @@
 package prot
 
 import (
-	"errors"
 	"io"
 
 	"gopkg.in/logex.v1"
@@ -12,6 +11,9 @@ type Error struct {
 }
 
 func NewError(err error) *Error {
+	if err == nil {
+		return &Error{nil}
+	}
 	return &Error{[]byte(err.Error())}
 }
 
@@ -21,6 +23,10 @@ func ReadError(r io.Reader) (*Error, error) {
 		return nil, logex.Trace(err)
 	}
 	return &e, nil
+}
+
+func (e *Error) PSet(r io.Reader) error {
+	return logex.Trace(readItem(r, e))
 }
 
 func (e *Error) PRead(r io.Reader) error {
@@ -34,7 +40,10 @@ func (e *Error) PRead(r io.Reader) error {
 }
 
 func (e *Error) Err() error {
-	return errors.New(string(e.underlay))
+	if len(e.underlay) == 0 {
+		return nil
+	}
+	return e
 }
 
 func (e *Error) Error() string {

@@ -27,6 +27,10 @@ func ReadMsgs(buf *message.Header, r io.Reader) (*Msgs, error) {
 	return s, nil
 }
 
+func (m *Msgs) PSet(r io.Reader) error {
+	return logex.Trace(readItem(r, m))
+}
+
 func (m *Msgs) Flag() byte {
 	return FlagMsgs
 }
