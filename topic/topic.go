@@ -155,22 +155,22 @@ func (t *Ins) ioLoop() {
 
 type putArgs struct {
 	msgs  []*message.Ins
-	reply chan<- *putError
+	reply chan<- *PutError
 }
 
-type putError struct {
-	n   int
-	err error
+type PutError struct {
+	N   int
+	Err error
 }
 
 func (t *Ins) PutSync(msgs []*message.Ins) (int, error) {
-	reply := make(chan *putError)
+	reply := make(chan *PutError)
 	t.Put(msgs, reply)
 	ret := <-reply
-	return ret.n, ret.err
+	return ret.N, ret.Err
 }
 
-func (t *Ins) Put(msgs []*message.Ins, reply chan *putError) {
+func (t *Ins) Put(msgs []*message.Ins, reply chan *PutError) {
 	t.putChan <- &putArgs{msgs, reply}
 }
 
@@ -186,7 +186,7 @@ func (t *Ins) put(arg *putArgs, timer *time.Timer) {
 			break
 		}
 	}
-	arg.reply <- &putError{i, err}
+	arg.reply <- &PutError{i, err}
 }
 
 type getArgs struct {

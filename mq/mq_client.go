@@ -4,18 +4,25 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 	"sync/atomic"
 
 	"github.com/chzyer/muxque/message"
 	"github.com/chzyer/muxque/prot"
+	"github.com/chzyer/muxque/topic"
 
 	"gopkg.in/logex.v1"
 )
 
+const (
+	MaxMethodSize = 16
+)
+
 var (
 	ErrMethodNotFound = logex.Define("method '%v' is not found")
+	ErrMethodTooLong  = logex.Define("method is too long")
 )
 
 type Method struct {
@@ -60,34 +67,76 @@ type Client struct {
 	incoming   chan *message.Reply
 	wg         sync.WaitGroup
 	state      State
+	stopChan   chan struct{}
+	errChan    chan error
+	putErrChan chan *topic.PutError
 	sync.Mutex
-
-	header []byte
 }
 
 func NewClient(que *Muxque, conn net.Conn) *Client {
 	c := &Client{
-		incoming: make(message.Chan),
-		que:      que,
-		conn:     conn,
-		state:    InitState,
+		incoming:   make(message.Chan),
+		que:        que,
+		conn:       conn,
+		state:      InitState,
+		stopChan:   make(chan struct{}),
+		errChan:    make(chan error, 1<<3),
+		putErrChan: make(chan *topic.PutError, 1<<3),
 	}
 	c.initMethod()
-	go c.msgLoop()
 	go c.readLoop()
+	go c.writeLoop()
 	return c
 }
 
 func (c *Client) initMethod() {
 	c.methods = []*Method{
-		NewMethod("get", c.MethodGet),
+		NewMethod("get", c.Get),
+		NewMethod("put", c.Put),
+	}
+}
+
+func (c *Client) writeLoop() {
+	c.wg.Add(1)
+	defer func() {
+		c.wg.Done()
+		c.Close()
+	}()
+
+	var (
+		err    error
+		putErr *topic.PutError
+		ctx    *message.Reply
+	)
+
+	for !c.state.IsClosed() {
+		select {
+		case err = <-c.errChan:
+			if logex.Equal(err, io.EOF) {
+				return
+			}
+			logex.Error(err)
+		case putErr = <-c.putErrChan:
+			if logex.Equal(putErr.Err, io.EOF) {
+				return
+			}
+			_ = putErr
+			logex.Error(putErr)
+		case ctx = <-c.incoming:
+			logex.Struct(ctx)
+		case <-c.stopChan:
+			return
+		}
 	}
 }
 
 func (c *Client) readLoop() {
 	buffer := bufio.NewReader(c.conn)
 	c.wg.Add(1)
-	defer c.wg.Done()
+	defer func() {
+		c.wg.Done()
+		c.Close()
+	}()
 
 	var (
 		err    error
@@ -96,13 +145,20 @@ func (c *Client) readLoop() {
 
 	for !c.state.IsClosed() {
 		method, err = buffer.ReadSlice('\n')
-		if err != nil && !logex.Equal(err, ErrMethodNotFound) {
+		if err != nil {
 			logex.Error(err)
-			break
+			return
 		}
-		c.selectMethod(method, buffer)
+		if len(method) > MaxMethodSize {
+			logex.Error(ErrMethodTooLong)
+			return
+		}
+		err = c.selectMethod(method[:len(method)-1], buffer)
+		if err != nil {
+			logex.Error(err)
+			return
+		}
 	}
-	c.close()
 }
 
 func (c *Client) selectMethod(method []byte, buffer *bufio.Reader) error {
@@ -120,48 +176,24 @@ func (c *Client) selectMethod(method []byte, buffer *bufio.Reader) error {
 	return m.Func(buffer)
 }
 
-func (c *Client) writeLoop() {
-	c.wg.Add(1)
-	defer c.wg.Done()
-}
-
 func (c *Client) addCtx(ctx *Context) {
 	c.Lock()
 	c.subscriber[ctx.String()] = ctx
 	c.Unlock()
 }
 
-func (c *Client) close() bool {
-	if !c.state.ToClose() {
-		return false
-	}
-	return true
-}
-
 func (c *Client) Close() {
-	if c.close() {
-		// close all subscribe
+	if !c.state.ToClose() {
+		return
 	}
+
+	close(c.stopChan)
+	c.wg.Wait()
+	close(c.errChan)
+	close(c.incoming)
 }
 
-func (c *Client) msgLoop() {
-	for {
-		select {
-		case ctx, ok := <-c.incoming:
-			if !ok {
-				break
-			}
-			_ = ctx
-		}
-	}
-}
-
-func (c *Client) Put(topicName string, msg []*message.Ins) (int, error) {
-	n, err := c.que.PutSync(topicName, msg)
-	return n, logex.Trace(err)
-}
-
-func (c *Client) MethodGet(r *bufio.Reader) error {
+func (c *Client) Get(r *bufio.Reader) error {
 	topicName, err := prot.ReadString(r)
 	if err != nil {
 		return logex.Trace(err)
@@ -174,10 +206,28 @@ func (c *Client) MethodGet(r *bufio.Reader) error {
 	if err != nil {
 		return logex.Trace(err)
 	}
-	return logex.Trace(c.Get(topicName, offset.Int64(), size.Int()))
+
+	c.get(topicName, offset.Int64(), size.Int())
+	return nil
 }
 
-func (c *Client) Get(topicName *prot.String, offset int64, size int) error {
+func (c *Client) get(topicName *prot.String, offset int64, size int) {
 	c.addCtx(&Context{topicName, offset, size})
-	return logex.Trace(c.que.GetSync(topicName, offset, size, c.incoming))
+	c.que.Get(topicName, offset, size, c.incoming, c.errChan)
+}
+
+func (c *Client) Put(r *bufio.Reader) error {
+	topicName, err := prot.ReadString(r)
+	if err != nil {
+		return logex.Trace(err)
+	}
+
+	var header message.Header // move to client field?
+	msgs, err := prot.ReadMsgs(&header, r)
+	if err != nil {
+		return logex.Trace(err)
+	}
+
+	c.que.Put(topicName.String(), msgs.Msgs(), c.putErrChan)
+	return nil
 }

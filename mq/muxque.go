@@ -48,21 +48,22 @@ func (m *Muxque) getTopic(name string) (*topic.Ins, error) {
 	return ins, nil
 }
 
-func (m *Muxque) PutSync(topicName string, data []*message.Ins) (int, error) {
+func (m *Muxque) Put(topicName string, data []*message.Ins, reply chan *topic.PutError) {
 	t, err := m.getTopic(topicName)
 	if err != nil {
-		return 0, logex.Trace(err)
+		reply <- &topic.PutError{0, logex.Trace(err)}
+		return
 	}
-	n, err := t.PutSync(data)
-	return n, logex.Trace(err)
+	t.Put(data, reply)
 }
 
-func (m *Muxque) GetSync(topicName *prot.String, offset int64, size int, reply message.ReplyChan) error {
+func (m *Muxque) Get(topicName *prot.String, offset int64, size int, reply message.ReplyChan, errChan chan error) {
 	t, err := m.getTopic(topicName.String())
 	if err != nil {
-		return logex.Trace(err)
+		errChan <- logex.Trace(err)
+		return
 	}
-	return logex.Trace(t.GetSync(offset, size, reply))
+	t.Get(offset, size, reply, errChan)
 }
 
 func (m *Muxque) CancelSync(topicName string, offset int64, size int, reply message.ReplyChan) error {

@@ -123,6 +123,24 @@ func NewByData(data *Data) *Ins {
 	return m
 }
 
+func ReadSlice(buf *Header, r io.Reader) ([]*Ins, error) {
+	var length uint16
+	var err error
+	if err = binary.Read(r, binary.LittleEndian, &length); err != nil {
+		return nil, logex.Trace(err)
+	}
+	ret := make([]*Ins, length)
+	i := 0
+	for ; i < int(length); i++ {
+		ret[i], err = Read(buf, r, RF_DEFAULT)
+		if err != nil {
+			err = logex.Trace(err)
+			break
+		}
+	}
+	return ret[:i], err
+}
+
 func Read(reuseBuf *Header, reader io.Reader, rf ReadFlag) (*Ins, error) {
 	n, msg, err := read(reuseBuf, reader)
 	if rf != RF_RESEEK_ON_FAULT || !logex.EqualAny(err, ErrReseekable) {

@@ -10,8 +10,8 @@ if [[ "$1" != "" ]]; then
 fi
 
 mkdir -p .cover
-go list ./... | xargs -I% bash -c 'name="%"; go test -covermode=count --coverprofile=.cover/${name//\//_} %'$output_null
-echo "mode: count" > $output_file
+go list ./... | xargs -I% bash -c 'name="%"; go test % --coverprofile=.cover/${name//\//_}'$output_null
+echo "mode: set" > $output_file
 cat .cover/* | grep -v mode >> $output_file
 rm -r .cover
 
