@@ -57,7 +57,7 @@ func (m *Muxque) Put(topicName string, data []*message.Ins, reply chan *topic.Pu
 	t.Put(data, reply)
 }
 
-func (m *Muxque) Get(topicName *prot.String, offset int64, size int, reply message.ReplyChan, errChan chan error) {
+func (m *Muxque) Get(topicName *prot.String, offset int64, size int, reply topic.ReplyChan, errChan chan error) {
 	t, err := m.getTopic(topicName.String())
 	if err != nil {
 		errChan <- logex.Trace(err)
@@ -66,7 +66,7 @@ func (m *Muxque) Get(topicName *prot.String, offset int64, size int, reply messa
 	t.Get(offset, size, reply, errChan)
 }
 
-func (m *Muxque) CancelSync(topicName string, offset int64, size int, reply message.ReplyChan) error {
+func (m *Muxque) CancelSync(topicName string, offset int64, size int, reply topic.ReplyChan) error {
 	t, err := m.getTopic(topicName)
 	if err != nil {
 		return logex.Trace(err)

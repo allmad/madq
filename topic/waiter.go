@@ -1,7 +1,5 @@
 package topic
 
-import "github.com/chzyer/muxque/message"
-
 // a client has multiple waiters
 //
 // once client want to get messages which are not prepared,
@@ -13,7 +11,7 @@ type Waiter struct {
 	offset  int64
 	size    int
 	oriSize int
-	reply   message.ReplyChan
+	reply   ReplyChan
 }
 
 func newWaiter(arg *getArgs, offset int64, size int) *Waiter {

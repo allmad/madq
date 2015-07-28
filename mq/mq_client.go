@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -64,7 +65,7 @@ type Client struct {
 	que        *Muxque
 	conn       net.Conn
 	subscriber map[string]*Context
-	incoming   chan *message.Reply
+	incoming   chan *topic.Reply
 	wg         sync.WaitGroup
 	state      State
 	stopChan   chan struct{}
@@ -75,7 +76,7 @@ type Client struct {
 
 func NewClient(que *Muxque, conn net.Conn) *Client {
 	c := &Client{
-		incoming:   make(message.Chan),
+		incoming:   make(topic.Chan),
 		que:        que,
 		conn:       conn,
 		state:      InitState,
@@ -106,7 +107,8 @@ func (c *Client) writeLoop() {
 	var (
 		err    error
 		putErr *topic.PutError
-		ctx    *message.Reply
+		ctx    *topic.Reply
+		w      = bufio.NewWriter(c.conn)
 	)
 
 	for !c.state.IsClosed() {
@@ -116,12 +118,13 @@ func (c *Client) writeLoop() {
 				return
 			}
 			logex.Error(err)
+			prot.WriteReply(w, []prot.Item{prot.NewError(err)})
 		case putErr = <-c.putErrChan:
 			if logex.Equal(putErr.Err, io.EOF) {
 				return
 			}
-			_ = putErr
 			logex.Error(putErr)
+			prot.WriteReply(w, []prot.Item{prot.NewStruct(putErr)})
 		case ctx = <-c.incoming:
 			logex.Struct(ctx)
 		case <-c.stopChan:
@@ -146,7 +149,9 @@ func (c *Client) readLoop() {
 	for !c.state.IsClosed() {
 		method, err = buffer.ReadSlice('\n')
 		if err != nil {
-			logex.Error(err)
+			if !logex.Equal(err, io.EOF) {
+				logex.Error(err)
+			}
 			return
 		}
 		if len(method) > MaxMethodSize {
@@ -170,7 +175,8 @@ func (c *Client) selectMethod(method []byte, buffer *bufio.Reader) error {
 		}
 	}
 	if m == nil {
-		return ErrMethodNotFound.Format(string(method))
+		a := strings.TrimSpace(string(method))
+		return ErrMethodNotFound.Format(a)
 	}
 
 	return m.Func(buffer)
@@ -191,6 +197,7 @@ func (c *Client) Close() {
 	c.wg.Wait()
 	close(c.errChan)
 	close(c.incoming)
+	c.conn.Close()
 }
 
 func (c *Client) Get(r *bufio.Reader) error {

@@ -9,6 +9,7 @@ import (
 	"github.com/chzyer/muxque/internal/bitmap"
 	"github.com/chzyer/muxque/internal/utils"
 	"github.com/chzyer/muxque/message"
+	"github.com/chzyer/muxque/prot"
 	"gopkg.in/logex.v1"
 )
 
@@ -163,6 +164,27 @@ type PutError struct {
 	Err error
 }
 
+func (p *PutError) PWrite(w io.Writer) (err error) {
+	return logex.Trace(prot.WriteItems(w, []prot.Item{
+		prot.NewInt64(uint64(p.N)),
+		prot.NewError(p.Err),
+	}))
+}
+
+func (p *PutError) PRead(r io.Reader) (err error) {
+	pn, err := prot.ReadInt64(r)
+	if err != nil {
+		return logex.Trace(err)
+	}
+	perr, err := prot.ReadError(r)
+	if err != nil {
+		return logex.Trace(err)
+	}
+	p.N = pn.Int()
+	p.Err = perr
+	return nil
+}
+
 func (t *Ins) PutSync(msgs []*message.Ins) (int, error) {
 	reply := make(chan *PutError)
 	t.Put(msgs, reply)
@@ -192,7 +214,7 @@ func (t *Ins) put(arg *putArgs, timer *time.Timer) {
 type getArgs struct {
 	offset int64
 	size   int
-	reply  message.ReplyChan
+	reply  ReplyChan
 	err    chan<- error
 
 	// context
@@ -204,13 +226,13 @@ func (g *getArgs) String() string {
 	return fmt.Sprintf("%v:%v", g.offset, g.size)
 }
 
-func (t *Ins) GetSync(offset int64, size int, reply message.ReplyChan) error {
+func (t *Ins) GetSync(offset int64, size int, reply ReplyChan) error {
 	errReply := make(chan error)
 	t.Get(offset, size, reply, errReply)
 	return <-errReply
 }
 
-func (t *Ins) Get(offset int64, size int, reply message.ReplyChan, err chan<- error) {
+func (t *Ins) Get(offset int64, size int, reply ReplyChan, err chan<- error) {
 	t.getChan <- &getArgs{
 		offset, size, reply, err,
 		offset, size,
@@ -254,7 +276,7 @@ func (t *Ins) get(arg *getArgs, mustReply bool) error {
 	}
 
 	if mustReply || p > 0 {
-		arg.reply <- message.NewReplyCtx(t.Name, msgs[:p])
+		arg.reply <- NewReplyCtx(t.Name, msgs[:p])
 	}
 	if logex.Equal(err, io.EOF) {
 		err = nil
@@ -280,7 +302,7 @@ func (t *Ins) addToWaiterList(w *Waiter) {
 	}
 }
 
-func (t *Ins) Cancel(offset int64, size int, reply message.ReplyChan) error {
+func (t *Ins) Cancel(offset int64, size int, reply ReplyChan) error {
 	errChan := make(chan error)
 	t.cancelChan <- &getArgs{
 		err:     errChan,

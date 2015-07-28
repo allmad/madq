@@ -45,7 +45,7 @@ func BenchmarkTopicGet(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	reply := make(chan *message.Reply, 1024)
+	reply := make(chan *Reply, 1024)
 
 	size := 0
 	off := int64(0)
@@ -111,8 +111,8 @@ func TestTopicCancel(t *testing.T) {
 		[]byte("who are kkk"),
 		[]byte("kjkj"),
 	}
-	incoming := make(chan *message.Reply, len(testSource))
-	incoming2 := make(chan *message.Reply, len(testSource))
+	incoming := make(chan *Reply, len(testSource))
+	incoming2 := make(chan *Reply, len(testSource))
 
 	wg.Add(1)
 	go func() {
@@ -181,7 +181,7 @@ func TestTopic(t *testing.T) {
 	}
 	wg.Add(len(testSource))
 	go func() {
-		incoming := make(chan *message.Reply, len(testSource))
+		incoming := make(chan *Reply, len(testSource))
 		errChan := make(chan error)
 		topic.Get(0, len(testSource), incoming, errChan)
 		idx := 0
