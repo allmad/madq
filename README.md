@@ -16,9 +16,8 @@ muxque is design to use in IM, follows pub/sub model, to achieve serve millions 
 ### benchmark
 
 * http test
-
 ```
-$ go run github.com/chzyer/muxque/bench/httpserver/* # run the http server
+$ go run bench/httpserver/server.go # run the http server
 $ go test -benchtime=10s -bench=. github.com/chzyer/muxque/bench
 testing: warning: no tests to run
 PASS
@@ -26,8 +25,18 @@ BenchmarkHttpPut	 3000000	      4267 ns/op (aka 234,356 rps)
 ok  	github.com/chzyer/muxque/bench	17.154s
 ```
 
-* internal test (without network)
+* api sync put (single client wait until server reply)
+```
+$ go run muxque.go
+$ make bench-sync-put
+go test -v -benchtime 5s -benchmem -bench=SyncPut -run=Nothing github.com/chzyer/muxque/bench
+testing: warning: no tests to run
+PASS
+BenchmarkApiSyncPut	 1000000	      5675 ns/op (aka 176,211 rps)	       3 B/op	       0 allocs/op
+ok  	github.com/chzyer/muxque/bench	5.779s
+```
 
+* internal test (without network)
 ```
 make bench-topic
 go test -v -benchmem -bench=. -run=Nothing github.com/chzyer/muxque/topic

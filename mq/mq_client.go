@@ -109,7 +109,9 @@ func (c *Client) writeLoop() {
 			if logex.Equal(putErr.Err, io.EOF) {
 				return
 			}
-			logex.Error(putErr)
+			if putErr.Err != nil {
+				logex.Error(putErr)
+			}
 			args[0] = prot.NewStruct(putErr)
 		case ctx = <-c.incoming:
 			args[0] = prot.NewStruct(ctx)
@@ -145,7 +147,9 @@ func (c *Client) readLoop() {
 	for !c.state.IsClosed() {
 		packetType, err = buffer.ReadByte()
 		if err != nil {
-			logex.Error(err)
+			if !logex.Equal(err, io.EOF) {
+				logex.Error(err)
+			}
 			return
 		}
 		if packetType != prot.FlagReq {
