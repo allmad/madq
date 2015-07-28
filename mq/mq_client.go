@@ -109,6 +109,7 @@ func (c *Client) writeLoop() {
 		putErr *topic.PutError
 		ctx    *topic.Reply
 		w      = bufio.NewWriter(c.conn)
+		args   = make([]prot.Item, 1)
 	)
 
 	for !c.state.IsClosed() {
@@ -118,16 +119,22 @@ func (c *Client) writeLoop() {
 				return
 			}
 			logex.Error(err)
-			prot.WriteReply(w, []prot.Item{prot.NewError(err)})
+			args[0] = prot.NewError(err)
 		case putErr = <-c.putErrChan:
 			if logex.Equal(putErr.Err, io.EOF) {
 				return
 			}
 			logex.Error(putErr)
-			prot.WriteReply(w, []prot.Item{prot.NewStruct(putErr)})
+			args[0] = prot.NewStruct(putErr)
 		case ctx = <-c.incoming:
-			logex.Struct(ctx)
+			args[0] = prot.NewStruct(ctx)
 		case <-c.stopChan:
+			return
+		}
+
+		err = prot.WriteReply(w, args)
+		if err != nil {
+			logex.Error(err)
 			return
 		}
 	}

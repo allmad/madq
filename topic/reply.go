@@ -31,6 +31,13 @@ func (rp *Reply) PRead(r io.Reader) error {
 	return nil
 }
 
+func (rp *Reply) PWrite(w io.Writer) error {
+	return logex.Trace(prot.WriteItems(w, []prot.Item{
+		prot.NewString(rp.Topic),
+		prot.NewMsgs(rp.Msgs),
+	}))
+}
+
 func NewReplyCtx(name string, msgs []*message.Ins) *Reply {
 	return &Reply{name, msgs}
 }
