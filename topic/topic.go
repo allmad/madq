@@ -328,7 +328,7 @@ func (t *Ins) doCancel(get *getArgs) {
 			return
 		}
 	}
-	get.err <- ErrSubscriberNotFound.Format(get.String())
+	get.err <- ErrSubscriberNotFound.Format(fmt.Sprintf("%v:%v,%v", get.oriOff, get.oriSize, t.waiterList.Len()))
 }
 
 func (t *Ins) checkWaiter() {
@@ -340,6 +340,7 @@ func (t *Ins) checkWaiter() {
 			break
 		}
 
+		//logex.Info("remove waiter:", waiter.oriOff, waiter.oriSize)
 		t.waiterList.Remove(item)
 		err = t.get(waiter.toGetArg(nil), false)
 		if err != nil {

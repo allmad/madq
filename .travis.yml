@@ -14,4 +14,4 @@ before_install:
   - go get github.com/chzyer/flagx
 script:
   - ./goverall.sh
-  - $HOME/gopath/bin/goveralls -service=travis-ci -coverprofile=.cover.out -repotoken=lTiDYeuo4HMaAjLuG0dAd9VS0xBzV3pLy
+  - bach -c "$HOME/gopath/bin/goveralls -service=travis-ci -coverprofile=.cover.out -repotoken=lTiDYeuo4HMaAjLuG0dAd9VS0xBzV3pLy | cat"
