@@ -30,12 +30,11 @@ ok  	github.com/chzyer/muxque/bench	18.811s
 ```
 $ go run muxque.go
 $ make bench-sync-put
-make bench-sync-put
 go test -v -benchtime 10s -benchmem -bench=SyncPut -run=Nothing github.com/chzyer/muxque/bench
 testing: warning: no tests to run
 PASS
-BenchmarkApiSyncPut	 2000000	      6279 ns/op (aka 159,261 rps)	       3 B/op	       0 allocs/op
-ok  	github.com/chzyer/muxque/bench	18.659s
+BenchmarkApiSyncPut	 5000000	      3445 ns/op (aka 290,275 rps)	       2 B/op	       0 allocs/op
+ok  	github.com/chzyer/muxque/bench	20.579s
 ```
 
 * internal test (without network)

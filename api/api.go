@@ -22,11 +22,13 @@ var (
 
 type Ins struct {
 	Endpoint string
-	conn     net.Conn
+	conn     *net.TCPConn
 	state    utils.State
 	reqQueue *list.List
 	reqChan  chan *Request
 	w        *bufio.Writer
+	stopChan chan struct{}
+	wg       sync.WaitGroup
 
 	sync.Mutex
 }
@@ -39,10 +41,11 @@ func New(endpoint string) (*Ins, error) {
 
 	a := &Ins{
 		Endpoint: endpoint,
-		conn:     conn,
+		conn:     conn.(*net.TCPConn),
 		state:    utils.InitState,
 		reqQueue: list.New(),
 		reqChan:  make(chan *Request, 1<<3),
+		stopChan: make(chan struct{}),
 		w:        bufio.NewWriter(conn),
 	}
 	go a.readLoop()
@@ -51,13 +54,18 @@ func New(endpoint string) (*Ins, error) {
 }
 
 func (a *Ins) writeLoop() {
+	a.wg.Add(1)
+	defer func() {
+		a.wg.Done()
+		a.Close()
+	}()
 	var (
 		req *Request
 		err error
 		w   = bufio.NewWriter(a.conn)
 	)
 
-	for {
+	for !a.state.IsClosed() {
 		select {
 		case req = <-a.reqChan:
 			if err = req.WriteTo(w); err != nil {
@@ -69,11 +77,19 @@ func (a *Ins) writeLoop() {
 			a.Lock()
 			a.reqQueue.PushBack(req)
 			a.Unlock()
+		case <-a.stopChan:
+			return
 		}
 	}
 }
 
 func (a *Ins) readLoop() {
+	a.wg.Add(1)
+	defer func() {
+		a.wg.Done()
+		a.Close()
+	}()
+
 	var (
 		r          = bufio.NewReader(a.conn)
 		packetType byte
@@ -84,7 +100,9 @@ func (a *Ins) readLoop() {
 	for !a.state.IsClosed() {
 		packetType, err = r.ReadByte()
 		if err != nil {
-			logex.Error(err)
+			if !logex.Equal(err, io.EOF) {
+				logex.Error(err)
+			}
 			return
 		}
 		if packetType == prot.FlagReq {
@@ -134,6 +152,16 @@ func (r *Request) WriteTo(w *bufio.Writer) error {
 		return logex.Trace(err)
 	}
 	return nil
+}
+
+func (a *Ins) Close() {
+	if !a.state.ToClose() {
+		return
+	}
+	close(a.stopChan)
+	a.conn.CloseRead()
+	a.wg.Wait()
+	a.conn.CloseWrite()
 }
 
 func (a *Ins) Get(topicName string, offset int64, size int) error {
