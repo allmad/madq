@@ -79,6 +79,12 @@ func (t *Ins) nameEncoded() string {
 	return utils.PathEncode(t.Name)
 }
 
+func (t *Ins) Delete() {
+	t.Close()
+	t.Wait()
+	t.file.Delete()
+}
+
 func (t *Ins) Close() {
 	close(t.stopChan)
 }

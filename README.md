@@ -17,33 +17,35 @@ muxque is design to use in IM, follows pub/sub model, to achieve serve millions 
 
 * http test
 ```
-$ go run bench/httpserver/server.go # run the http server
-$ go test -benchtime=10s -bench=. github.com/chzyer/muxque/bench
+$ go run bench/httpserver/server.go
+$ make bench-http
+go test -v -benchtime 10s -benchmem -bench=Http -run=Nothing github.com/chzyer/muxque/bench
 testing: warning: no tests to run
 PASS
-BenchmarkHttpPut	 3000000	      4267 ns/op (aka 234,356 rps)
-ok  	github.com/chzyer/muxque/bench	17.154s
+BenchmarkHttpPut	 3000000	      4808 ns/op (aka 207,986 rps)	      16 B/op	       0 allocs/op
+ok  	github.com/chzyer/muxque/bench	18.811s
 ```
 
 * api sync put (single client wait until server reply)
 ```
 $ go run muxque.go
 $ make bench-sync-put
-go test -v -benchtime 5s -benchmem -bench=SyncPut -run=Nothing github.com/chzyer/muxque/bench
+make bench-sync-put
+go test -v -benchtime 10s -benchmem -bench=SyncPut -run=Nothing github.com/chzyer/muxque/bench
 testing: warning: no tests to run
 PASS
-BenchmarkApiSyncPut	 1000000	      5675 ns/op (aka 176,211 rps)	       3 B/op	       0 allocs/op
-ok  	github.com/chzyer/muxque/bench	5.779s
+BenchmarkApiSyncPut	 2000000	      6279 ns/op (aka 159,261 rps)	       3 B/op	       0 allocs/op
+ok  	github.com/chzyer/muxque/bench	18.659s
 ```
 
 * internal test (without network)
 ```
 make bench-topic
-go test -v -benchmem -bench=. -run=Nothing github.com/chzyer/muxque/topic
+go test -v -benchtime 10s -benchmem -bench=. -run=Nothing github.com/chzyer/muxque/topic
 PASS
-BenchmarkTopicGet	  500000	      2745 ns/op (aka 364,298 rps)	     432 B/op	       8 allocs/op
-BenchmarkTopicPut	  500000	      2341 ns/op (aka 427,167 rps)	     118 B/op	       3 allocs/op
-ok  	github.com/chzyer/muxque/topic	3.835s
+BenchmarkTopicGet	 5000000	      3242 ns/op (aka 308,451 rps)	     432 B/op	       8 allocs/op
+BenchmarkTopicPut	 5000000	      2354 ns/op (aka 424,808 rps)	     119 B/op	       3 allocs/op
+ok  	github.com/chzyer/muxque/topic	46.872s
 ```
 
 nsq

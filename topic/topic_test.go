@@ -29,6 +29,8 @@ func BenchmarkTopicGet(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	topic.Delete()
+	topic, _ = New("bench-get", c)
 
 	data := message.NewData([]byte(utils.RandString(256)))
 
@@ -49,33 +51,25 @@ func BenchmarkTopicGet(b *testing.B) {
 
 	size := 0
 	off := int64(0)
-	var wg sync.WaitGroup
-	go func() {
-		for msgs := range reply {
-			wg.Add(1)
-			for _, m := range msgs.Msgs {
-				off += int64(len(m.Bytes()))
-				wg.Done()
-			}
-			size -= len(msgs.Msgs)
-			wg.Done()
-			if size == 0 {
-				continue
-			}
-		}
-	}()
-
 	for i := 0; i < n; i++ {
 		if size < MaxGetBenchSize {
 			size++
 			continue
 		}
 
-		wg.Add(size)
 		if err := topic.GetSync(off, size, reply); err != nil {
 			b.Fatal(err)
 		}
-		wg.Wait()
+
+		for msgs := range reply {
+			for _, m := range msgs.Msgs {
+				off += int64(len(m.Bytes()))
+			}
+			size -= len(msgs.Msgs)
+			if size == 0 {
+				break
+			}
+		}
 	}
 	close(reply)
 }

@@ -58,6 +58,11 @@ func NewFileEx(path string, chunkBit uint) (*File, error) {
 	}, nil
 }
 
+func (f *File) Delete() {
+	f.Close()
+	os.RemoveAll(f.base)
+}
+
 func (f *File) getIdx(off int64) int64 {
 	return off >> f.chunkBit
 }
