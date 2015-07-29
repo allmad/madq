@@ -3,7 +3,6 @@ package bitmap
 import (
 	"io"
 	"os"
-	"sort"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -61,6 +60,11 @@ func NewFileEx(path string, chunkBit uint) (*File, error) {
 func (f *File) Delete() {
 	f.Close()
 	os.RemoveAll(f.base)
+}
+
+func GetName(chunk uint, offset int64) string {
+	f := &File{chunkBit: chunk}
+	return strconv.FormatInt(f.getIdx(offset), 36)
 }
 
 func (f *File) getIdx(off int64) int64 {
@@ -144,7 +148,6 @@ func (f *File) ReadAt(buf []byte, at int64) (n int, err error) {
 		return n, logex.Trace(err, chunkOffset)
 	}
 
-	// println(at, at>>f.chunkBit, int64(n), chunkOffset, sizeLeft)
 	nNew, err := f.ReadAt(buf[n:], at+int64(n))
 	n += nNew
 	return n, logex.Trace(err, at+int64(n))
@@ -179,27 +182,24 @@ func (f *File) Size() int64 {
 	if len(names) == 0 {
 		return 0
 	}
-	sort.Strings(names)
-
-	var (
-		lastFile string
-		chunkIdx int64
-	)
-	for i := len(names) - 1; i >= 0; i-- {
-		chunkIdx, err = strconv.ParseInt(names[i], 36, 64)
+	idx := int64(-1)
+	var name string
+	for i := 0; i < len(names); i++ {
+		chunkIdx, err := strconv.ParseInt(names[i], 36, 64)
 		if err != nil {
+			logex.Error(err)
 			continue
 		}
-		lastFile = names[i]
-		break
+		if chunkIdx > idx {
+			idx = chunkIdx
+			name = names[i]
+		}
 	}
-	if lastFile == "" {
-		return 0
-	}
-	info, err := os.Stat(f.base + lastFile)
+	info, err := os.Stat(f.base + name)
 	if err != nil {
+		logex.Error(err)
 		return 0
 	}
 
-	return chunkIdx<<f.chunkBit + info.Size()
+	return idx<<f.chunkBit + info.Size()
 }

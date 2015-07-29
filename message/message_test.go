@@ -66,8 +66,10 @@ func TestMessage(t *testing.T) {
 	}
 
 	{
+		// dump data
 		bin := append([]byte("hello"), MagicBytes...)
 		bin = append(bin, []byte{4, 0, 0, 0}...)
+
 		m.SetMsgId(uint64(len(bin)))
 		bin = append(bin, m.underlay...)
 		buf := utils.NewReaderBuf(bin)

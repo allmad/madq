@@ -3,6 +3,7 @@ package topic
 import (
 	"bytes"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -31,8 +32,10 @@ func BenchmarkTopicGet(b *testing.B) {
 	}
 	topic.Delete()
 	topic, _ = New("bench-get", c)
+	defer topic.Close()
 
-	data := message.NewData([]byte(utils.RandString(256)))
+	bin := strings.Repeat(utils.RandString(1), 256)
+	data := message.NewData([]byte(bin))
 
 	msg := message.NewByData(data)
 	var buffer []*message.Ins
@@ -62,11 +65,9 @@ func BenchmarkTopicGet(b *testing.B) {
 		}
 
 		for msgs := range reply {
-			for _, m := range msgs.Msgs {
-				off += int64(len(m.Bytes()))
-			}
 			size -= len(msgs.Msgs)
 			if size == 0 {
+				off = msgs.Offset
 				break
 			}
 		}

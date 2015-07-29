@@ -12,12 +12,25 @@ type ReplyChan chan<- *Reply
 type Chan chan *Reply
 
 type Reply struct {
-	Topic string
-	Msgs  []*message.Ins
+	Topic  string
+	Offset int64
+	Msgs   []*message.Ins
+}
+
+func NewReplyCtx(name string, msgs []*message.Ins) *Reply {
+	offset := int64(0)
+	if len(msgs) > 0 {
+		offset = msgs[len(msgs)-1].NextOff()
+	}
+	return &Reply{name, offset, msgs}
 }
 
 func (rp *Reply) PRead(r io.Reader) error {
 	pt, err := prot.ReadString(r)
+	if err != nil {
+		return logex.Trace(err)
+	}
+	po, err := prot.ReadInt64(r)
 	if err != nil {
 		return logex.Trace(err)
 	}
@@ -27,6 +40,7 @@ func (rp *Reply) PRead(r io.Reader) error {
 		return logex.Trace(err)
 	}
 	rp.Topic = pt.String()
+	rp.Offset = po.Int64()
 	rp.Msgs = pm.Msgs()
 	return nil
 }
@@ -34,10 +48,7 @@ func (rp *Reply) PRead(r io.Reader) error {
 func (rp *Reply) PWrite(w io.Writer) error {
 	return logex.Trace(prot.WriteItems(w, []prot.Item{
 		prot.NewString(rp.Topic),
+		prot.NewInt64(uint64(rp.Offset)),
 		prot.NewMsgs(rp.Msgs),
 	}))
-}
-
-func NewReplyCtx(name string, msgs []*message.Ins) *Reply {
-	return &Reply{name, msgs}
 }

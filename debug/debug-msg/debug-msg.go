@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/binary"
+	"fmt"
 
 	"github.com/chzyer/flagx"
+	"github.com/chzyer/muxque/internal/bitmap"
 	"github.com/chzyer/muxque/internal/utils"
 	"github.com/chzyer/muxque/message"
 
@@ -11,8 +13,10 @@ import (
 )
 
 type Config struct {
-	MsgBin string
-	MsgId  string
+	MsgBin    string
+	MsgId     string
+	MsgOffset int64
+	Hex       string
 }
 
 func NewConfig() *Config {
@@ -28,10 +32,19 @@ func msgBin(msgBytes []byte) {
 	logex.Info("crc:", msgBytes[message.OffsetMsgCrc:message.OffsetMsgCrc+message.SizeMsgCrc])
 	logex.Info("version:", msgBytes[message.OffsetMsgVer:message.OffsetMsgVer+message.SizeMsgVer])
 	logex.Info("data:", msgBytes[message.OffsetMsgData:])
+	logex.Info("total:", len(msgBytes))
 }
 
 func msgId(msgid []byte) {
 	logex.Info(binary.LittleEndian.Uint64(msgid))
+}
+
+func msgOffset(msgOffset int64) {
+	println(bitmap.GetName(22, msgOffset))
+}
+
+func hex(b []byte) {
+	fmt.Printf("%x", b)
 }
 
 func main() {
@@ -41,5 +54,11 @@ func main() {
 	}
 	if c.MsgId != "" {
 		msgId(utils.ByteStr(c.MsgId))
+	}
+	if c.MsgOffset > 0 {
+		msgOffset(c.MsgOffset)
+	}
+	if c.Hex != "" {
+		hex(utils.ByteStr(c.Hex))
 	}
 }

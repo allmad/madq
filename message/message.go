@@ -122,30 +122,26 @@ func Read(reuseBuf *Header, reader io.Reader, rf ReadFlag) (*Ins, error) {
 	if !ok {
 		panic(ErrReadFlagInvalid)
 	}
-	r.Offset -= int64(n)
+	r.Offset -= int64(n) - 1
 	offset := r.Offset
 	logex.Errorf("begin to reseek, offset: (%v), why: (%v)", offset, err)
 
-	var skiped int64
-
 	buf := bufio.NewReader(r)
-	for skiped < MaxReseekBytes {
-		tmp, err := buf.ReadSlice(MagicByte)
-		skiped += int64(len(tmp))
+	for r.Offset-offset < MaxReseekBytes {
+		_, err := buf.ReadSlice(MagicByte)
 		if err == bufio.ErrBufferFull {
 			continue
 		}
 		if err != nil {
 			return nil, logex.Trace(err)
 		}
-
-		offset = offset + skiped - 1
-		r.Offset = offset
+		r.Offset -= int64(buf.Buffered()) + 1
 		n, msg, err = read(reuseBuf, r)
 		if !logex.EqualAny(err, ErrReseekable) {
 			return msg, logex.Trace(err)
 		}
-		r.Offset -= int64(n)
+
+		r.Offset -= int64(n) - 1
 		buf.Reset(r)
 		continue
 	}
@@ -199,7 +195,7 @@ func ReadHeader(buf []byte, lengthRef *uint32) (err error) {
 
 	length := binary.LittleEndian.Uint32(buf[SizeMsgMagic:])
 	if length < MinMsgLength {
-		return ErrInvalidLength.Trace(length)
+		return ErrInvalidLength.Trace(length, SizeMsgHeader)
 	}
 	*lengthRef = length
 	return nil
@@ -224,6 +220,7 @@ func New(data []byte) (m *Ins, err error) {
 	h := crc32.NewIEEE()
 	h.Write(data[OffsetMsgCrcCheck:])
 	if m.Crc != h.Sum32() {
+		logex.Info(data)
 		return nil, ErrChecksumNotMatch.Trace(m.Crc, h.Sum32())
 	}
 
