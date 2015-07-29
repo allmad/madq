@@ -42,8 +42,8 @@ ok  	github.com/chzyer/muxque/bench	20.579s
 $ make bench-topic
 go test -v -benchtime 10s -benchmem -bench=. -run=Nothing github.com/chzyer/muxque/topic
 PASS
-BenchmarkTopicGet	 5000000	      2805 ns/op	     432 B/op	       8 allocs/op
-BenchmarkTopicPut	 5000000	      2622 ns/op	     119 B/op	       3 allocs/op
+BenchmarkTopicGet	 5000000	      2805 ns/op (381,388 rps)	     432 B/op	       8 allocs/op
+BenchmarkTopicPut	 5000000	      2622 ns/op (356,506 rps)	     119 B/op	       3 allocs/op
 ok  	github.com/chzyer/muxque/topic	46.333s
 ```
 
