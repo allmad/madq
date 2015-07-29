@@ -100,6 +100,9 @@ func TestTopicCancel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	topic.Delete()
+	topic, _ = New("topicCancel", c)
+
 	var wg sync.WaitGroup
 	var testSource = [][]byte{
 		[]byte("helo"),
