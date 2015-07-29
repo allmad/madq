@@ -118,28 +118,23 @@ func TestTopicCancel(t *testing.T) {
 			return
 		}
 		msg := <-incoming
-		if len(msg.Msgs) == 0 {
-			// reget
-			msg = <-incoming
-		}
 		off := msg.Msgs[0].NextOff()
 		if err := topic.GetSync(off, len(testSource), incoming2); err != nil {
 			logex.Error(err)
 			t.Error(err)
 			return
 		}
-		<-incoming2 // empty
 	}()
-	if _, err := topic.PutSync([]*message.Ins{message.NewByData(
-		message.NewData(testSource[0]),
-	)}); err != nil {
+	if _, err := topic.PutSync([]*message.Ins{
+		message.NewByData(message.NewData(testSource[0])),
+	}); err != nil {
 		t.Fatal(err)
 		return
 	}
-	wg.Wait()
 	if err := topic.Cancel(0, len(testSource), incoming); err != nil {
 		t.Fatal(err)
 	}
+	wg.Wait()
 	if _, err := topic.PutSync([]*message.Ins{message.NewByData(
 		message.NewData(testSource[1]),
 	)}); err != nil {

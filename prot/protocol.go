@@ -18,9 +18,10 @@ const (
 	FlagStruct
 )
 
-const (
-	FlagReply byte = 0xf0
-	FlagReq   byte = 0xf1
+var (
+	FlagReply   = []byte{0xf0}
+	FlagReq     = []byte{0xf1}
+	FlagMsgPush = []byte{0xf2}
 )
 
 type ItemStruct interface {
@@ -62,11 +63,21 @@ func writeFlag(w io.Writer, s Item) error {
 	return logex.Trace(err)
 }
 
-func WriteReply(w io.Writer, items []Item) error {
-	if _, err := w.Write([]byte{FlagReply}); err != nil {
+func Write(w io.Writer, flag []byte, items []Item) (err error) {
+	if _, err = w.Write(flag); err != nil {
 		return logex.Trace(err)
 	}
-	if err := WriteItems(w, items); err != nil {
+	if err = WriteItems(w, items); err != nil {
+		return logex.Trace(err)
+	}
+	return nil
+}
+
+func WriteItem(w io.Writer, item Item) (err error) {
+	if err = writeFlag(w, item); err != nil {
+		return logex.Trace(err)
+	}
+	if err = item.PWrite(w); err != nil {
 		return logex.Trace(err)
 	}
 	return nil
@@ -74,10 +85,7 @@ func WriteReply(w io.Writer, items []Item) error {
 
 func WriteItems(w io.Writer, items []Item) (err error) {
 	for i := 0; i < len(items); i++ {
-		if err = writeFlag(w, items[i]); err != nil {
-			return logex.Trace(err)
-		}
-		if err = items[i].PWrite(w); err != nil {
+		if err = WriteItem(w, items[i]); err != nil {
 			return logex.Trace(err)
 		}
 	}

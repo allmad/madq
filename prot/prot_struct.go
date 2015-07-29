@@ -14,6 +14,11 @@ func NewStruct(item ItemStruct) *Struct {
 	return &Struct{item}
 }
 
+func (s *Struct) Set(i ItemStruct) *Struct {
+	s.underlay = i
+	return s
+}
+
 func (s *Struct) Flag() byte {
 	return FlagStruct
 }

@@ -16,19 +16,20 @@ import (
 )
 
 var (
-	MethodGet = prot.NewString("get")
-	MethodPut = prot.NewString("put")
+	mGet = prot.NewString("get\n")
+	mPut = prot.NewString("put\n")
 )
 
 type Ins struct {
-	Endpoint string
-	conn     *net.TCPConn
-	state    utils.State
-	reqQueue *list.List
-	reqChan  chan *Request
-	w        *bufio.Writer
-	stopChan chan struct{}
-	wg       sync.WaitGroup
+	Endpoint  string
+	conn      *net.TCPConn
+	state     utils.State
+	reqQueue  *list.List
+	reqChan   chan *Request
+	w         *bufio.Writer
+	stopChan  chan struct{}
+	replyChan chan *topic.Reply
+	wg        sync.WaitGroup
 
 	sync.Mutex
 }
@@ -40,17 +41,22 @@ func New(endpoint string) (*Ins, error) {
 	}
 
 	a := &Ins{
-		Endpoint: endpoint,
-		conn:     conn.(*net.TCPConn),
-		state:    utils.InitState,
-		reqQueue: list.New(),
-		reqChan:  make(chan *Request, 1<<3),
-		stopChan: make(chan struct{}),
-		w:        bufio.NewWriter(conn),
+		Endpoint:  endpoint,
+		conn:      conn.(*net.TCPConn),
+		state:     utils.InitState,
+		reqQueue:  list.New(),
+		reqChan:   make(chan *Request, 1<<3),
+		replyChan: make(chan *topic.Reply, 1024),
+		stopChan:  make(chan struct{}),
+		w:         bufio.NewWriter(conn),
 	}
 	go a.readLoop()
 	go a.writeLoop()
 	return a, nil
+}
+
+func (a *Ins) ReplyChan() chan *topic.Reply {
+	return a.replyChan
 }
 
 func (a *Ins) writeLoop() {
@@ -91,26 +97,34 @@ func (a *Ins) readLoop() {
 	}()
 
 	var (
-		r          = bufio.NewReader(a.conn)
-		packetType byte
-		err        error
-		req        *Request
-		item       *list.Element
+		pt   byte
+		err  error
+		req  *Request
+		item *list.Element
 	)
+
+	r := bufio.NewReader(a.conn)
+	msgStruct := prot.NewStruct(nil)
+
 	for !a.state.IsClosed() {
-		packetType, err = r.ReadByte()
+		pt, err = r.ReadByte()
 		if err != nil {
 			if !logex.Equal(err, io.EOF) {
 				logex.Error(err)
 			}
 			return
 		}
-		if packetType == prot.FlagReq {
-			logex.Info("req!!")
+		if pt == prot.FlagMsgPush[0] {
+			var reply topic.Reply
+			if err = msgStruct.Set(&reply).PSet(r); err != nil {
+				logex.Error(err)
+				continue
+			}
+			a.replyChan <- &reply
 			return
 		}
-		if packetType != prot.FlagReply {
-			logex.Error("unexpect packetType:", packetType)
+		if pt != prot.FlagReply[0] {
+			logex.Error("unexpect packetType:", pt)
 			return
 		}
 		a.Lock()
@@ -145,9 +159,8 @@ func NewRequest(method *prot.String, args []prot.Item, reply prot.Item) *Request
 }
 
 func (r *Request) WriteTo(w *bufio.Writer) error {
-	w.WriteByte(prot.FlagReq)
+	w.Write(prot.FlagReq)
 	w.Write(r.Method.Bytes())
-	w.WriteByte('\n')
 	if err := prot.WriteItems(w, r.Args); err != nil {
 		return logex.Trace(err)
 	}
@@ -166,7 +179,7 @@ func (a *Ins) Close() {
 
 func (a *Ins) Get(topicName string, offset int64, size int) error {
 	var err prot.Error
-	req := NewRequest(MethodGet, []prot.Item{
+	req := NewRequest(mGet, []prot.Item{
 		prot.NewString(topicName),
 		prot.NewInt64(uint64(offset)),
 		prot.NewInt64(uint64(size)),
@@ -178,7 +191,7 @@ func (a *Ins) Get(topicName string, offset int64, size int) error {
 
 func (a *Ins) Put(topicName string, msgs []*message.Ins) (int, error) {
 	var err topic.PutError
-	req := NewRequest(MethodPut, []prot.Item{
+	req := NewRequest(mPut, []prot.Item{
 		prot.NewString(topicName),
 		prot.NewMsgs(msgs),
 	}, prot.NewStruct(&err))

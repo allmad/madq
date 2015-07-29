@@ -246,7 +246,7 @@ func (t *Ins) Get(offset int64, size int, reply ReplyChan, err chan<- error) {
 }
 
 func (t *Ins) getAsync(arg *getArgs, timer *time.Timer) {
-	err := t.get(arg, true)
+	err := t.get(arg, false)
 	arg.err <- err
 }
 

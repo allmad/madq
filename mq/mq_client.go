@@ -93,6 +93,7 @@ func (c *Client) writeLoop() {
 		err    error
 		putErr *topic.PutError
 		ctx    *topic.Reply
+		flag   []byte
 		w      = bufio.NewWriter(c.conn)
 		args   = make([]prot.Item, 1)
 	)
@@ -105,6 +106,7 @@ func (c *Client) writeLoop() {
 			}
 			logex.Error(err)
 			args[0] = prot.NewError(err)
+			flag = prot.FlagReply
 		case putErr = <-c.putErrChan:
 			if logex.Equal(putErr.Err, io.EOF) {
 				return
@@ -113,13 +115,15 @@ func (c *Client) writeLoop() {
 				logex.Error(putErr)
 			}
 			args[0] = prot.NewStruct(putErr)
+			flag = prot.FlagReply
 		case ctx = <-c.incoming:
 			args[0] = prot.NewStruct(ctx)
+			flag = prot.FlagMsgPush
 		case <-c.stopChan:
 			return
 		}
 
-		err = prot.WriteReply(w, args)
+		err = prot.Write(w, flag, args)
 		if err == nil {
 			err = logex.Trace(w.Flush())
 		}
@@ -152,7 +156,7 @@ func (c *Client) readLoop() {
 			}
 			return
 		}
-		if packetType != prot.FlagReq {
+		if packetType != prot.FlagReq[0] {
 			logex.Error("unexpect packetType:", packetType)
 			return
 		}
