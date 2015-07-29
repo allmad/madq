@@ -7,14 +7,14 @@ import (
 	"gopkg.in/logex.v1"
 )
 
-func Listen(addr string, conf *topic.Config, runClient func(*Muxque, net.Conn)) error {
+func Listen(addr string, conf *topic.Config, runClient func(*Muxque, net.Conn)) (*Muxque, *net.TCPListener, error) {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return logex.Trace(err)
+		return nil, nil, logex.Trace(err)
 	}
 	que, err := NewMuxque(conf)
 	if err != nil {
-		return logex.Trace(err)
+		return nil, nil, logex.Trace(err)
 	}
 	go func() {
 		for {
@@ -26,5 +26,5 @@ func Listen(addr string, conf *topic.Config, runClient func(*Muxque, net.Conn)) 
 			go runClient(que, conn)
 		}
 	}()
-	return nil
+	return que, ln.(*net.TCPListener), nil
 }

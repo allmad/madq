@@ -26,15 +26,16 @@ BenchmarkHttpPut	 3000000	      4808 ns/op (aka 207,986 rps)	      16 B/op	     
 ok  	github.com/chzyer/muxque/bench	18.811s
 ```
 
-* api sync put (single client wait until server reply)
+* sync api (single client wait until server reply)
 ```
 $ go run muxque.go
-$ make bench-sync-put
-go test -v -benchtime 10s -benchmem -bench=SyncPut -run=Nothing github.com/chzyer/muxque/bench
+$ make bench-sync-api
+go test -v -benchtime 10s -benchmem -bench=ApiSync -run=Nothing github.com/chzyer/muxque/bench
 testing: warning: no tests to run
 PASS
-BenchmarkApiSyncPut	 5000000	      3445 ns/op (aka 290,275 rps)	       2 B/op	       0 allocs/op
-ok  	github.com/chzyer/muxque/bench	20.579s
+BenchmarkApiSyncGet	 3000000	      4540 ns/op (aka 220,264 rps)	     332 B/op	       3 allocs/op
+BenchmarkApiSyncPut	 5000000	      3355 ns/op (aka 298,062 rps)	       2 B/op	       0 allocs/op
+ok  	github.com/chzyer/muxque/bench	52.065s
 ```
 
 * internal test (without network)

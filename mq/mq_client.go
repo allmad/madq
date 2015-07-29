@@ -65,6 +65,7 @@ func NewClient(que *Muxque, conn net.Conn) *Client {
 		que:        que,
 		conn:       conn,
 		state:      utils.InitState,
+		subscriber: make(map[string]*Context, 1<<3),
 		stopChan:   make(chan struct{}),
 		errChan:    make(chan error, 1<<3),
 		putErrChan: make(chan *topic.PutError, 1<<3),
@@ -104,7 +105,9 @@ func (c *Client) writeLoop() {
 			if logex.Equal(err, io.EOF) {
 				return
 			}
-			logex.Error(err)
+			if err != nil {
+				logex.Error(err)
+			}
 			args[0] = prot.NewError(err)
 			flag = prot.FlagReply
 		case putErr = <-c.putErrChan:
@@ -206,6 +209,7 @@ func (c *Client) Close() {
 		return
 	}
 
+	logex.Info("mq_client close")
 	close(c.stopChan)
 	c.wg.Wait()
 	close(c.errChan)

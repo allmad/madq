@@ -21,7 +21,8 @@ func main() {
 		Root:     utils.GetRoot("/topics/"),
 		ChunkBit: 22,
 	}
-	if err := mq.Listen(":12345", conf, RunClient); err != nil {
+	_, _, err := mq.Listen(":12345", conf, RunClient)
+	if err != nil {
 		logex.Fatal(err)
 	}
 

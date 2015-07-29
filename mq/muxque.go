@@ -48,6 +48,11 @@ func (m *Muxque) getTopic(name string) (*topic.Ins, error) {
 	return ins, nil
 }
 
+func (m *Muxque) Delete(topicName string) error {
+	// TBD, change topic to require/release mode
+	return nil
+}
+
 func (m *Muxque) Put(topicName string, data []*message.Ins, reply chan *topic.PutError) {
 	t, err := m.getTopic(topicName)
 	if err != nil {

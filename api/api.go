@@ -121,7 +121,7 @@ func (a *Ins) readLoop() {
 				continue
 			}
 			a.replyChan <- &reply
-			return
+			continue
 		}
 		if pt != prot.FlagReply[0] {
 			logex.Error("unexpect packetType:", pt)

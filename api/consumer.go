@@ -13,11 +13,10 @@ import (
 type Consumer struct {
 	*Config
 	Offset    int64
-	Topic     string
 	api       *Ins
 	wg        sync.WaitGroup
 	stopChan  chan struct{}
-	replyChan chan *topic.Reply
+	ReplyChan chan *topic.Reply
 	kickChan  chan struct{}
 	Remain    int64
 }
@@ -28,10 +27,11 @@ func NewConsumer(conf *Config) (*Consumer, error) {
 		return nil, logex.Trace(err)
 	}
 	c := &Consumer{
-		api:      api,
-		Config:   conf,
-		stopChan: make(chan struct{}),
-		kickChan: make(chan struct{}, 1),
+		api:       api,
+		Config:    conf,
+		stopChan:  make(chan struct{}),
+		ReplyChan: make(chan *topic.Reply, conf.Size),
+		kickChan:  make(chan struct{}, 1),
 	}
 	return c, nil
 }
@@ -55,6 +55,7 @@ func (c *Consumer) replyLoop() {
 			default:
 			}
 		}
+		c.ReplyChan <- reply
 	}
 }
 
