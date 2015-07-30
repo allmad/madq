@@ -111,19 +111,20 @@ func TestTopicCancel(t *testing.T) {
 	}
 	incoming := make(chan *Reply, len(testSource))
 	incoming2 := make(chan *Reply, len(testSource))
+	subsize := len(testSource)
 
 	wg.Add(1)
 
 	go func() {
 		defer wg.Done()
-		if err := topic.GetSync(0, 100, incoming); err != nil {
+		if err := topic.GetSync(0, subsize, incoming); err != nil {
 			logex.Error(err)
 			t.Error(err)
 			return
 		}
 		msg := <-incoming
 		off := msg.Msgs[0].NextOff()
-		if err := topic.GetSync(off, 100, incoming2); err != nil {
+		if err := topic.GetSync(off, subsize, incoming2); err != nil {
 			logex.Error(err)
 			t.Error(err)
 			return
@@ -136,7 +137,7 @@ func TestTopicCancel(t *testing.T) {
 		return
 	}
 	wg.Wait()
-	if err := topic.Cancel(0, 100, incoming); err != nil {
+	if err := topic.Cancel(0, subsize, incoming); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := topic.PutSync([]*message.Ins{message.NewByData(
