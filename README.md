@@ -6,6 +6,8 @@
 muxque is design to use in IM, follows pub/sub model, to achieve serve millions users by multiplex sockets.
 
 ### goal
+---
+
 * possible to subscribe multiple topics/channels in one client.
 * always persist messages to disk to keep them safe
 * zero-extra-cost(disk) for multicasted messages/channels
@@ -15,18 +17,21 @@ muxque is design to use in IM, follows pub/sub model, to achieve serve millions 
 
 
 ### roadmap
+---
 
-[x] topic-basic get/put
-[x] sdk: has a simple version (/api)
-[x] sdk: add a simple consumer
-[ ] sdk: add a sync producer
-[ ] sdk: consumer support subscribe multiple topics
-[ ] sdk: consumer save offset to disk
-[ ] sdk / [ ] svr: producer support publish messages of different topics multiplex in one batch call
+[x] topic-basic get/put   
+[x] sdk: has a simple version (/api)  
+[x] sdk: add a simple consumer  
+[ ] sdk: add a sync producer  
+[ ] sdk: consumer support subscribe multiple topics  
+[ ] sdk: consumer save offset to disk  
+[ ] sdk / [ ] svr: producer support publish messages of different topics multiplex in one batch call  
 
 ### benchmark
+---
 
 * http test
+
 ```
 $ go run bench/httpserver/server.go
 $ make bench-http
@@ -38,6 +43,7 @@ ok  	github.com/chzyer/muxque/bench	18.811s
 ```
 
 * sync api (single client wait until server reply)
+
 ```
 $ go run muxque.go
 $ make bench-sync-api
@@ -50,6 +56,7 @@ ok  	github.com/chzyer/muxque/bench	52.065s
 ```
 
 * internal test (without network)
+
 ```
 $ make bench-topic
 go test -v -benchtime 10s -benchmem -bench=. -run=Nothing github.com/chzyer/muxque/topic
@@ -59,7 +66,8 @@ BenchmarkTopicPut	 5000000	      2622 ns/op (356,506 rps)	     119 B/op	       3
 ok  	github.com/chzyer/muxque/topic	46.333s
 ```
 
-nsq
+* nsq
+
 ```
 # using --mem-queue-size=1000000 --data-path= --size=200 --batch-size=200
 # compiling/running nsqd
