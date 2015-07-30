@@ -11,6 +11,7 @@ import (
 
 	"github.com/chzyer/muxque/message"
 	"github.com/chzyer/muxque/prot"
+	"github.com/chzyer/muxque/rpc"
 	"github.com/chzyer/muxque/topic"
 	"github.com/chzyer/muxque/utils"
 
@@ -27,12 +28,12 @@ var (
 )
 
 type Method struct {
-	Name []byte
+	Name *prot.String
 	Func func(*bufio.Reader) error
 }
 
-func NewMethod(name string, f func(*bufio.Reader) error) *Method {
-	return &Method{[]byte(name), f}
+func NewMethod(name *prot.String, f func(*bufio.Reader) error) *Method {
+	return &Method{name, f}
 }
 
 type Context struct {
@@ -78,8 +79,9 @@ func NewClient(que *Muxque, conn net.Conn) *Client {
 
 func (c *Client) initMethod() {
 	c.methods = []*Method{
-		NewMethod("get", c.Get),
-		NewMethod("put", c.Put),
+		NewMethod(rpc.MGet, c.Get),
+		NewMethod(rpc.MPut, c.Put),
+		NewMethod(rpc.MDelete, c.Delete),
 	}
 }
 
@@ -174,7 +176,7 @@ func (c *Client) readLoop() {
 			logex.Error(ErrMethodTooLong)
 			return
 		}
-		err = c.selectMethod(method[:len(method)-1], buffer)
+		err = c.selectMethod(method, buffer)
 		if err != nil {
 			logex.Error(err)
 			return
@@ -185,7 +187,7 @@ func (c *Client) readLoop() {
 func (c *Client) selectMethod(method []byte, buffer *bufio.Reader) error {
 	var m *Method
 	for i := 0; i < len(c.methods); i++ {
-		if bytes.Equal(method, c.methods[i].Name) {
+		if bytes.Equal(method, c.methods[i].Name.Bytes()) {
 			m = c.methods[i]
 			break
 		}
@@ -253,5 +255,14 @@ func (c *Client) Put(r *bufio.Reader) error {
 	}
 
 	c.que.Put(topicName.String(), msgs.Msgs(), c.putErrChan)
+	return nil
+}
+
+func (c *Client) Delete(r *bufio.Reader) error {
+	topicName, err := prot.ReadString(r)
+	if err != nil {
+		return logex.Trace(err)
+	}
+	c.que.Delete(topicName.String(), c.errChan)
 	return nil
 }

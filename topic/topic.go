@@ -129,6 +129,11 @@ func (t *Ins) MarkClose() {
 	}
 }
 
+func (t *Ins) DeleteAndClose() {
+	t.MarkDelete()
+	t.SafeDone()
+}
+
 func (t *Ins) MarkDelete() {
 	if atomic.AddInt32(&t.ref, deleteRef)&closeRef == 0 {
 		t.Release()

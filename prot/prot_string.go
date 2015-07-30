@@ -1,6 +1,7 @@
 package prot
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 
@@ -17,6 +18,10 @@ func NewString(s string) *String {
 
 func (s *String) String() string {
 	return string(s.underlay)
+}
+
+func (s *String) Equal(b []byte) bool {
+	return bytes.Equal(b, s.underlay)
 }
 
 func (s *String) Bytes() []byte {

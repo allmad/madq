@@ -9,15 +9,11 @@ import (
 
 	"github.com/chzyer/muxque/message"
 	"github.com/chzyer/muxque/prot"
+	"github.com/chzyer/muxque/rpc"
 	"github.com/chzyer/muxque/topic"
 	"github.com/chzyer/muxque/utils"
 
 	"gopkg.in/logex.v1"
-)
-
-var (
-	mGet = prot.NewString("get\n")
-	mPut = prot.NewString("put\n")
 )
 
 type Ins struct {
@@ -179,23 +175,33 @@ func (a *Ins) Close() {
 
 func (a *Ins) Get(topicName string, offset int64, size int) error {
 	var err prot.Error
-	req := NewRequest(mGet, []prot.Item{
+	a.doReq(rpc.MGet, []prot.Item{
 		prot.NewString(topicName),
 		prot.NewInt64(uint64(offset)),
 		prot.NewInt64(uint64(size)),
 	}, &err)
-	a.reqChan <- req
-	<-req.Reply
 	return err.Err()
 }
 
 func (a *Ins) Put(topicName string, msgs []*message.Ins) (int, error) {
 	var err topic.PutError
-	req := NewRequest(mPut, []prot.Item{
+	a.doReq(rpc.MPut, []prot.Item{
 		prot.NewString(topicName),
 		prot.NewMsgs(msgs),
 	}, prot.NewStruct(&err))
+	return err.N, err.Err
+}
+
+func (a *Ins) doReq(m *prot.String, args []prot.Item, reply prot.Item) {
+	req := NewRequest(m, args, reply)
 	a.reqChan <- req
 	<-req.Reply
-	return err.N, err.Err
+}
+
+func (a *Ins) Delete(topicName string) error {
+	err := prot.NewError(nil)
+	a.doReq(rpc.MDelete, []prot.Item{
+		prot.NewString(topicName),
+	}, err)
+	return err.Err()
 }
