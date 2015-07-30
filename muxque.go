@@ -6,9 +6,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/chzyer/muxque/internal/utils"
 	"github.com/chzyer/muxque/mq"
 	"github.com/chzyer/muxque/topic"
+	"github.com/chzyer/muxque/utils"
 	"gopkg.in/logex.v1"
 )
 

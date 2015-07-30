@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/chzyer/muxque/api"
-	"github.com/chzyer/muxque/internal/utils"
 	"github.com/chzyer/muxque/message"
+	"github.com/chzyer/muxque/utils"
 )
 
 func min(a, b int) int {

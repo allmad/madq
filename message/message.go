@@ -7,9 +7,8 @@ import (
 	"io"
 	"math"
 
+	"github.com/chzyer/muxque/utils"
 	"github.com/klauspost/crc32"
-
-	"github.com/chzyer/muxque/internal/utils"
 	"gopkg.in/logex.v1"
 )
 

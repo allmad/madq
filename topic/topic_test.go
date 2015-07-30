@@ -7,8 +7,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/chzyer/muxque/internal/utils"
 	"github.com/chzyer/muxque/message"
+	"github.com/chzyer/muxque/utils"
 	"gopkg.in/logex.v1"
 )
 
