@@ -13,6 +13,17 @@ muxque is design to use in IM, follows pub/sub model, to achieve serve millions 
 * the number of topic can be unlimit(depends on hardware)
 * provide a horizontally scaling solution
 
+
+### roadmap
+
+[x] topic-basic get/put
+[x] sdk: has a simple version (/api)
+[x] sdk: add a simple consumer
+[ ] sdk: add a sync producer
+[ ] sdk: consumer support subscribe multiple topics
+[ ] sdk: consumer save offset to disk
+[ ] sdk / [ ] svr: producer support publish messages of different topics multiplex in one batch call
+
 ### benchmark
 
 * http test
