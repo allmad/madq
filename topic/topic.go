@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/chzyer/muxque/bitmap"
@@ -35,6 +36,18 @@ func (c *Config) Path(name string) string {
 	return fmt.Sprintf("%s/%s", c.Root, name)
 }
 
+const (
+	deleteRef = 0x0f000000
+	closeRef  = 0x00f00000
+	maxReq    = 0x000fffff
+	notReqRef = deleteRef | closeRef
+)
+
+var (
+	ErrMarkDelete = logex.Define("require that which is marked delete")
+	ErrMarkClose  = logex.Define("require that which is marked close")
+)
+
 type Ins struct {
 	Name   string
 	config *Config
@@ -45,12 +58,14 @@ type Ins struct {
 	// linked list for Waiters
 	waiterList *utils.List
 
-	stopChan   chan struct{}
-	wg         sync.WaitGroup
 	putChan    chan *putArgs
 	getChan    chan *getArgs
-	checkChan  chan struct{}
 	cancelChan chan *getArgs
+	checkChan  chan struct{}
+
+	ref      int32
+	stopChan chan struct{}
+	wg       sync.WaitGroup
 }
 
 func New(name string, config *Config) (t *Ins, err error) {
@@ -62,7 +77,8 @@ func New(name string, config *Config) (t *Ins, err error) {
 		getChan:    make(chan *getArgs, 1<<3),
 		cancelChan: make(chan *getArgs),
 		checkChan:  make(chan struct{}, 1),
-		stopChan:   make(chan struct{}),
+
+		stopChan: make(chan struct{}),
 	}
 	path := config.Path(t.nameEncoded())
 	t.file, err = bitmap.NewFileEx(path, config.ChunkBit)
@@ -71,6 +87,7 @@ func New(name string, config *Config) (t *Ins, err error) {
 	}
 
 	t.writer = &utils.Writer{t.file, t.file.Size()}
+	t.Require()
 	go t.ioLoop()
 	return t, nil
 }
@@ -79,85 +96,97 @@ func (t *Ins) nameEncoded() string {
 	return utils.PathEncode(t.Name)
 }
 
-func (t *Ins) Delete() {
-	t.Close()
-	t.Wait()
-	t.file.Delete()
+func (t *Ins) Require() error {
+	ref := atomic.AddInt32(&t.ref, 1)
+
+	if ref&notReqRef == 0 {
+		return nil
+	}
+	atomic.AddInt32(&t.ref, -1) // recover
+	if ref&deleteRef > 0 {
+		return ErrMarkDelete
+	}
+	return ErrMarkClose
 }
 
-func (t *Ins) Close() {
+func (t *Ins) Release() bool {
+	ref := atomic.AddInt32(&t.ref, -1)
+	if ref < 0 {
+		panic("release to negative")
+	}
+	if ref&maxReq > 0 || (ref&notReqRef == 0) {
+		return false
+	}
+
 	close(t.stopChan)
+	return true
 }
 
-func (t *Ins) Wait() {
+func (t *Ins) MarkClose() {
+	ref := atomic.AddInt32(&t.ref, closeRef)
+	if ref&deleteRef == 0 {
+		t.Release()
+	}
+}
+
+func (t *Ins) MarkDelete() {
+	if atomic.AddInt32(&t.ref, deleteRef)&closeRef == 0 {
+		t.Release()
+	}
+}
+
+func (t *Ins) SafeDone() {
 	t.wg.Wait()
+	if atomic.LoadInt32(&t.ref)&deleteRef > 0 {
+		t.file.Delete()
+	}
 }
 
 func (t *Ins) ioLoop() {
 	t.wg.Add(1)
 	defer t.wg.Done()
+
 	var (
 		put *putArgs
 		get *getArgs
-		ok  bool
 
 		timer = time.NewTimer(0)
 	)
 	for {
 		select {
-		case put, ok = <-t.putChan:
-			goto put
-		case get, ok = <-t.getChan:
-			goto get
-		case _, ok = <-t.checkChan:
-			if !ok {
-				break
+		case put = <-t.putChan:
+			t.put(put, timer)
+			select {
+			case t.checkChan <- struct{}{}:
+			default:
 			}
-			goto check
-		case get, ok = <-t.cancelChan:
-			if !ok {
-				break
-			}
-			goto cancel
+		case get = <-t.getChan:
+			t.getAsync(get, timer)
+		case <-t.checkChan:
+			t.checkWaiter()
+		case get = <-t.cancelChan:
+			t.doCancel(get)
 		case <-t.stopChan:
 			goto exit
 		}
 
-	put:
-		if !ok {
-			break
-		}
-		t.put(put, timer)
-		select {
-		case t.checkChan <- struct{}{}:
-		default:
-		}
-		continue
-
-	get:
-		if !ok {
-			break
-		}
-		t.getAsync(get, timer)
-		continue
-
-	check:
-		if !ok {
-			break
-		}
-		t.checkWaiter()
-		continue
-
-	cancel:
-		if !ok {
-			break
-		}
-		t.doCancel(get)
-		continue
-
-	exit:
-		break
 	}
+
+exit:
+	close(t.putChan)
+
+	var ok bool
+	for {
+		select {
+		case put, ok = <-t.putChan:
+			if !ok {
+				return
+			}
+		default:
+			return
+		}
+	}
+
 }
 
 type putArgs struct {

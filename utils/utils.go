@@ -1,6 +1,13 @@
 package utils
 
-import "os"
+import (
+	"math"
+	"os"
+)
+
+var (
+	MinInt32 = math.MinInt32
+)
 
 func GetRoot(s string) string {
 	root := os.Getenv("TEST_ROOT")

@@ -21,9 +21,6 @@ var (
 	addr = ":12345"
 )
 
-func init() {
-}
-
 func runClient(m *mq.Muxque, conn net.Conn) {
 	mq.NewClient(m, conn)
 }

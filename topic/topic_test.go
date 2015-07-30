@@ -30,9 +30,10 @@ func BenchmarkTopicGet(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	topic.Delete()
+	topic.MarkDelete()
+	topic.SafeDone()
 	topic, _ = New("bench-get", c)
-	defer topic.Close()
+	defer topic.Release()
 
 	bin := strings.Repeat(utils.RandString(1), 256)
 	data := message.NewData([]byte(bin))
@@ -100,7 +101,8 @@ func TestTopicCancel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	topic.Delete()
+	topic.MarkDelete()
+	topic.SafeDone()
 	topic, _ = New("topicCancel", c)
 
 	var wg sync.WaitGroup
