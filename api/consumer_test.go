@@ -40,6 +40,12 @@ func TestConsumer(t *testing.T) {
 		Size:     100,
 		Topic:    "test-consumer",
 	}
+	if a, err := New(config.Endpoint); err != nil {
+		logex.Fatal(err)
+	} else if err := a.Delete(config.Topic); err != nil && !logex.Equal(err, ErrTopicNotFound) {
+		logex.Fatal(err)
+	}
+
 	c, err := NewConsumer(config)
 	if err != nil {
 		logex.Fatal(err)

@@ -16,6 +16,10 @@ import (
 	"gopkg.in/logex.v1"
 )
 
+var (
+	ErrTopicNotFound = logex.Define("topic not found")
+)
+
 type Ins struct {
 	Endpoint  string
 	conn      *net.TCPConn
@@ -137,32 +141,6 @@ func (a *Ins) readLoop() {
 	return
 }
 
-type Request struct {
-	Method   *prot.String
-	Args     []prot.Item
-	Reply    chan struct{}
-	replyObj prot.Item
-	GenReply func(r io.Reader)
-}
-
-func NewRequest(method *prot.String, args []prot.Item, reply prot.Item) *Request {
-	return &Request{
-		Method:   method,
-		Args:     args,
-		Reply:    make(chan struct{}),
-		replyObj: reply,
-	}
-}
-
-func (r *Request) WriteTo(w *bufio.Writer) error {
-	w.Write(prot.FlagReq)
-	w.Write(r.Method.Bytes())
-	if err := prot.WriteItems(w, r.Args); err != nil {
-		return logex.Trace(err)
-	}
-	return nil
-}
-
 func (a *Ins) Close() {
 	if !a.state.ToClose() {
 		return
@@ -199,9 +177,42 @@ func (a *Ins) doReq(m *prot.String, args []prot.Item, reply prot.Item) {
 }
 
 func (a *Ins) Delete(topicName string) error {
-	err := prot.NewError(nil)
+	perr := prot.NewError(nil)
 	a.doReq(rpc.MDelete, []prot.Item{
 		prot.NewString(topicName),
-	}, err)
-	return err.Err()
+	}, perr)
+	err := perr.Err()
+	if err == nil {
+		return nil
+	}
+	if err.Error() == ErrTopicNotFound.Error() {
+		err = ErrTopicNotFound.Trace()
+	}
+	return err
+}
+
+type Request struct {
+	Method   *prot.String
+	Args     []prot.Item
+	Reply    chan struct{}
+	replyObj prot.Item
+	GenReply func(r io.Reader)
+}
+
+func NewRequest(method *prot.String, args []prot.Item, reply prot.Item) *Request {
+	return &Request{
+		Method:   method,
+		Args:     args,
+		Reply:    make(chan struct{}),
+		replyObj: reply,
+	}
+}
+
+func (r *Request) WriteTo(w *bufio.Writer) error {
+	w.Write(prot.FlagReq)
+	w.Write(r.Method.Bytes())
+	if err := prot.WriteItems(w, r.Args); err != nil {
+		return logex.Trace(err)
+	}
+	return nil
 }

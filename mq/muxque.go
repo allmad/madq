@@ -27,6 +27,12 @@ func NewMuxque(topicCfg *topic.Config) (*Muxque, error) {
 	return m, nil
 }
 
+func (m *Muxque) deleteTopic(name string) {
+	m.Lock()
+	delete(m.topics, name)
+	m.Unlock()
+}
+
 func (m *Muxque) getTopic(name string, gen bool) (ins *topic.Ins, err error) {
 	m.RLock()
 	ins = m.topics[name]
@@ -67,7 +73,7 @@ func (m *Muxque) getTopic(name string, gen bool) (ins *topic.Ins, err error) {
 }
 
 func (m *Muxque) Delete(topicName string, reply chan error) {
-	t, err := m.getTopic(topicName, false)
+	t, err := m.getTopic(topicName, true)
 	if err != nil {
 		reply <- err
 		return
@@ -76,6 +82,7 @@ func (m *Muxque) Delete(topicName string, reply chan error) {
 	t.MarkDelete()
 	go func() {
 		t.SafeDone()
+		m.deleteTopic(topicName)
 		reply <- nil
 	}()
 }
