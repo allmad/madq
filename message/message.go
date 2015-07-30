@@ -88,6 +88,10 @@ type Ins struct {
 	underlay []byte
 }
 
+func NewByBin(b []byte) *Ins {
+	return NewByData(NewData(b))
+}
+
 func NewByData(data *Data) *Ins {
 	underlay := data.underlay
 	underlay[OffsetMsgVer] = byte(1)

@@ -28,6 +28,10 @@ func ReadMsgs(buf *message.Header, r io.Reader) (*Msgs, error) {
 }
 
 func (m *Msgs) PSet(r io.Reader) error {
+	if m.buf == nil {
+		var header message.Header
+		m.buf = &header
+	}
 	return logex.Trace(readItem(r, m))
 }
 

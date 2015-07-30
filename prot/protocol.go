@@ -24,13 +24,9 @@ var (
 	FlagMsgPush = []byte{0xf2}
 )
 
-type ItemStruct interface {
+type Item interface {
 	PRead(io.Reader) error
 	PWrite(p io.Writer) error
-}
-
-type Item interface {
-	ItemStruct
 	PSet(r io.Reader) error
 	Flag() byte
 }

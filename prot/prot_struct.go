@@ -10,6 +10,11 @@ type Struct struct {
 	underlay ItemStruct
 }
 
+type ItemStruct interface {
+	PRead(io.Reader) error
+	PWrite(io.Writer) error
+}
+
 func NewStruct(item ItemStruct) *Struct {
 	return &Struct{item}
 }
