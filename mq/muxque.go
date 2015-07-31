@@ -17,12 +17,16 @@ type Muxque struct {
 	topicCfg *topic.Config
 	topics   map[string]*topic.Ins
 	sync.RWMutex
+
+	stopChan chan struct{}
+	wg       sync.WaitGroup
 }
 
 func NewMuxque(topicCfg *topic.Config) (*Muxque, error) {
 	m := &Muxque{
 		topicCfg: topicCfg,
 		topics:   make(map[string]*topic.Ins, 1024),
+		stopChan: make(chan struct{}),
 	}
 	return m, nil
 }
@@ -117,6 +121,15 @@ func (m *Muxque) CancelSync(topicName string, offset int64, size int, reply topi
 	return err
 }
 
+func (m *Muxque) clientComing() chan struct{} {
+	m.wg.Add(1)
+	return m.stopChan
+}
+
+func (m *Muxque) clientLeaving() {
+	m.wg.Done()
+}
+
 func (m *Muxque) Close() {
 	m.Lock()
 	defer m.Unlock()
@@ -126,4 +139,6 @@ func (m *Muxque) Close() {
 	for _, t := range m.topics {
 		t.SafeDone()
 	}
+	close(m.stopChan)
+	m.wg.Wait()
 }

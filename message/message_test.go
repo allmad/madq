@@ -9,7 +9,7 @@ import (
 	"gopkg.in/logex.v1"
 )
 
-func BenchmarkNewMessageByData(b *testing.B) {
+func BenchmarkMarshal(b *testing.B) {
 	source := NewData([]byte(cc.RandString(256)))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -17,7 +17,7 @@ func BenchmarkNewMessageByData(b *testing.B) {
 	}
 }
 
-func BenchmarkNewMessageRaw256(b *testing.B) {
+func BenchmarkUnmarshal(b *testing.B) {
 	m := NewByData(NewData([]byte(cc.RandString(256))))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

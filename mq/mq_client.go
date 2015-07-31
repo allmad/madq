@@ -47,30 +47,33 @@ func (c *Context) String() string {
 }
 
 type Client struct {
-	methods    []*Method
-	que        *Muxque
-	conn       net.Conn
-	subscriber map[string]*Context
-	incoming   chan *topic.Reply
-	wg         sync.WaitGroup
-	state      cc.State
-	stopChan   chan struct{}
-	errChan    chan error
-	putErrChan chan *topic.PutError
+	methods        []*Method
+	que            *Muxque
+	conn           net.Conn
+	subscriber     map[string]*Context
+	incoming       chan *topic.Reply
+	wg             sync.WaitGroup
+	state          cc.State
+	stopChan       chan struct{}
+	errChan        chan error
+	putErrChan     chan *topic.PutError
+	parentStopChan chan struct{}
 	sync.Mutex
 }
 
 func NewClient(que *Muxque, conn net.Conn) *Client {
 	c := &Client{
-		incoming:   make(topic.Chan),
-		que:        que,
-		conn:       conn,
-		state:      cc.InitState,
-		subscriber: make(map[string]*Context, 1<<3),
-		stopChan:   make(chan struct{}),
-		errChan:    make(chan error, 1<<3),
-		putErrChan: make(chan *topic.PutError, 1<<3),
+		incoming:       make(topic.Chan),
+		que:            que,
+		conn:           conn,
+		state:          cc.InitState,
+		subscriber:     make(map[string]*Context, 1<<3),
+		stopChan:       make(chan struct{}),
+		errChan:        make(chan error, 1<<3),
+		putErrChan:     make(chan *topic.PutError, 1<<3),
+		parentStopChan: que.clientComing(),
 	}
+
 	c.initMethod()
 	go c.readLoop()
 	go c.writeLoop()
@@ -82,6 +85,7 @@ func (c *Client) initMethod() {
 		NewMethod(rpc.MGet, c.Get),
 		NewMethod(rpc.MPut, c.Put),
 		NewMethod(rpc.MDelete, c.Delete),
+		NewMethod(rpc.MPing, c.Ping),
 	}
 }
 
@@ -124,6 +128,8 @@ func (c *Client) writeLoop() {
 		case ctx = <-c.incoming:
 			args[0] = prot.NewStruct(ctx)
 			flag = prot.FlagMsgPush
+		case <-c.parentStopChan:
+			return
 		case <-c.stopChan:
 			return
 		}
@@ -211,12 +217,13 @@ func (c *Client) Close() {
 		return
 	}
 
-	logex.Info("mq_client close")
+	logex.Debug("mq_client close")
 	close(c.stopChan)
 	c.wg.Wait()
 	close(c.errChan)
 	close(c.incoming)
 	c.conn.Close()
+	c.que.clientLeaving()
 }
 
 func (c *Client) Get(r *bufio.Reader) error {
@@ -264,5 +271,14 @@ func (c *Client) Delete(r *bufio.Reader) error {
 		return logex.Trace(err)
 	}
 	c.que.Delete(topicName.String(), c.errChan)
+	return nil
+}
+
+func (c *Client) Ping(r *bufio.Reader) error {
+	_, err := prot.ReadString(r)
+	if err != nil {
+		return logex.Trace(err)
+	}
+	c.errChan <- nil
 	return nil
 }

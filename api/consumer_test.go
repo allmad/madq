@@ -25,16 +25,24 @@ func runClient(m *mq.Muxque, conn net.Conn) {
 	mq.NewClient(m, conn)
 }
 
-func TestConsumer(t *testing.T) {
+type Fataler interface {
+	Fatal(...interface{})
+}
+
+func runServer(t Fataler) (*mq.Muxque, *net.TCPListener) {
 	que, ln, err := mq.Listen(addr, conf, runClient)
 	if err != nil {
-		logex.Fatal(err)
+		t.Fatal(err)
 	}
-	defer func() {
-		ln.Close()
-		que.Close()
-	}()
+	return que, ln
+}
 
+func closeServer(que *mq.Muxque, ln *net.TCPListener) {
+	ln.Close()
+	que.Close()
+}
+
+func TestConsumer(t *testing.T) {
 	config := &Config{
 		Endpoint: ":12345",
 		Size:     100,

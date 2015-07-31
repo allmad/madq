@@ -8,6 +8,12 @@ test: install
 cover:
 	./goverall.sh
 
+bench-message:
+	go test -v -benchtime $(TIME) -benchmem -bench=. -run=Nothing github.com/chzyer/muxque/message
+
+bench-ping:
+	go test -v -benchtime $(TIME) -benchmem -bench=Ping -run=Nothing github.com/chzyer/muxque/api
+
 bench-topic:
 	go test -v -benchtime $(TIME) -benchmem -bench=. -run=Nothing github.com/chzyer/muxque/topic
 

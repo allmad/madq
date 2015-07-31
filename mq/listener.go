@@ -2,6 +2,7 @@ package mq
 
 import (
 	"net"
+	"strings"
 
 	"github.com/chzyer/muxque/topic"
 	"gopkg.in/logex.v1"
@@ -20,7 +21,9 @@ func Listen(addr string, conf *topic.Config, runClient func(*Muxque, net.Conn)) 
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
-				logex.Error(err)
+				if !strings.Contains(err.Error(), "use of closed network connection") {
+					logex.Error(err)
+				}
 				break
 			}
 			go runClient(que, conn)

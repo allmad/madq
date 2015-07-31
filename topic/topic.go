@@ -58,10 +58,11 @@ type Ins struct {
 	// linked list for Waiters
 	waiterList *cc.List
 
-	putChan    chan *putArgs
-	getChan    chan *getArgs
-	cancelChan chan *getArgs
-	checkChan  chan struct{}
+	putChan     chan *putArgs
+	putChanPool chan *putArgs
+	getChan     chan *getArgs
+	cancelChan  chan *getArgs
+	checkChan   chan struct{}
 
 	ref      int32
 	stopChan chan struct{}
@@ -70,15 +71,19 @@ type Ins struct {
 
 func New(name string, config *Config) (t *Ins, err error) {
 	t = &Ins{
-		config:     config,
-		Name:       name,
-		waiterList: cc.NewList(),
-		putChan:    make(chan *putArgs, 1<<3),
-		getChan:    make(chan *getArgs, 1<<3),
-		cancelChan: make(chan *getArgs),
-		checkChan:  make(chan struct{}, 1),
+		config:      config,
+		Name:        name,
+		waiterList:  cc.NewList(),
+		putChan:     make(chan *putArgs, 1<<3),
+		putChanPool: make(chan *putArgs, 1<<3),
+		getChan:     make(chan *getArgs, 1<<3),
+		cancelChan:  make(chan *getArgs),
+		checkChan:   make(chan struct{}, 1),
 
 		stopChan: make(chan struct{}),
+	}
+	for i := 0; i < cap(t.putChanPool); i++ {
+		t.putChanPool <- &putArgs{}
 	}
 	path := config.Path(t.nameEncoded())
 	t.file, err = bitmap.NewFileEx(path, config.ChunkBit)
@@ -161,6 +166,7 @@ func (t *Ins) ioLoop() {
 		select {
 		case put = <-t.putChan:
 			t.put(put, timer)
+			// t.putChanPool <- put
 			select {
 			case t.checkChan <- struct{}{}:
 			default:
@@ -233,7 +239,11 @@ func (t *Ins) PutSync(msgs []*message.Ins) (int, error) {
 }
 
 func (t *Ins) Put(msgs []*message.Ins, reply chan *PutError) {
-	t.putChan <- &putArgs{msgs, reply}
+	// pa := <-t.putChanPool
+	pa := new(putArgs)
+	pa.msgs = msgs
+	pa.reply = reply
+	t.putChan <- pa
 }
 
 func (t *Ins) put(arg *putArgs, timer *time.Timer) {
