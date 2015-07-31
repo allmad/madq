@@ -12,7 +12,7 @@ import (
 	"gopkg.in/logex.v1"
 )
 
-func RunClient(que *mq.Muxque, conn net.Conn) {
+func RunClient(que *mq.Muxque, conn *net.TCPConn) {
 	mq.NewClient(que, conn)
 }
 
