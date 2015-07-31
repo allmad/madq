@@ -8,18 +8,19 @@ import (
 	"gopkg.in/logex.v1"
 )
 
-func Listen(addr string, conf *topic.Config, runClient func(*Muxque, net.Conn)) (*Muxque, *net.TCPListener, error) {
-	ln, err := net.Listen("tcp", addr)
+func Listen(addr string, conf *topic.Config, runClient func(*Muxque, *net.TCPConn)) (*Muxque, *net.TCPListener, error) {
+	gln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, nil, logex.Trace(err)
 	}
+	ln := gln.(*net.TCPListener)
 	que, err := NewMuxque(conf)
 	if err != nil {
 		return nil, nil, logex.Trace(err)
 	}
 	go func() {
 		for {
-			conn, err := ln.Accept()
+			conn, err := ln.AcceptTCP()
 			if err != nil {
 				if !strings.Contains(err.Error(), "use of closed network connection") {
 					logex.Error(err)
@@ -29,5 +30,5 @@ func Listen(addr string, conf *topic.Config, runClient func(*Muxque, net.Conn)) 
 			go runClient(que, conn)
 		}
 	}()
-	return que, ln.(*net.TCPListener), nil
+	return que, ln, nil
 }

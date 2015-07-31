@@ -21,7 +21,7 @@ var (
 	addr = ":12345"
 )
 
-func runClient(m *mq.Muxque, conn net.Conn) {
+func runClient(m *mq.Muxque, conn *net.TCPConn) {
 	mq.NewClient(m, conn)
 }
 
@@ -43,6 +43,9 @@ func closeServer(que *mq.Muxque, ln *net.TCPListener) {
 }
 
 func TestConsumer(t *testing.T) {
+	que, ln := runServer(t)
+	defer closeServer(que, ln)
+
 	config := &Config{
 		Endpoint: ":12345",
 		Size:     100,
@@ -65,7 +68,6 @@ func TestConsumer(t *testing.T) {
 
 	go func() {
 		for reply := range c.ReplyChan {
-			println("coming", len(reply.Msgs))
 			for _ = range reply.Msgs {
 				wg.Done()
 			}

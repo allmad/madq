@@ -49,7 +49,7 @@ func (c *Context) String() string {
 type Client struct {
 	methods        []*Method
 	que            *Muxque
-	conn           net.Conn
+	conn           *net.TCPConn
 	subscriber     map[string]*Context
 	incoming       chan *topic.Reply
 	wg             sync.WaitGroup
@@ -61,7 +61,7 @@ type Client struct {
 	sync.Mutex
 }
 
-func NewClient(que *Muxque, conn net.Conn) *Client {
+func NewClient(que *Muxque, conn *net.TCPConn) *Client {
 	c := &Client{
 		incoming:       make(topic.Chan),
 		que:            que,
@@ -219,6 +219,7 @@ func (c *Client) Close() {
 
 	logex.Debug("mq_client close")
 	close(c.stopChan)
+	c.conn.CloseRead()
 	c.wg.Wait()
 	close(c.errChan)
 	close(c.incoming)
