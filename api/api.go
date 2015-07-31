@@ -176,6 +176,12 @@ func (a *Ins) doReq(m *prot.String, args []prot.Item, reply prot.Item) {
 	<-req.Reply
 }
 
+func (a *Ins) Ping(payload *prot.String) error {
+	perr := prot.NewError(nil)
+	a.doReq(rpc.MPing, []prot.Item{payload}, perr)
+	return perr.Err()
+}
+
 func (a *Ins) Delete(topicName string) error {
 	perr := prot.NewError(nil)
 	a.doReq(rpc.MDelete, []prot.Item{
