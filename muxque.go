@@ -6,9 +6,9 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/chzyer/muxque/cc"
 	"github.com/chzyer/muxque/mq"
 	"github.com/chzyer/muxque/topic"
-	"github.com/chzyer/muxque/utils"
 	"gopkg.in/logex.v1"
 )
 
@@ -18,7 +18,7 @@ func RunClient(que *mq.Muxque, conn net.Conn) {
 
 func main() {
 	conf := &topic.Config{
-		Root:     utils.GetRoot("/topics/"),
+		Root:     cc.GetRoot("/topics/"),
 		ChunkBit: 22,
 	}
 	_, _, err := mq.Listen(":12345", conf, RunClient)

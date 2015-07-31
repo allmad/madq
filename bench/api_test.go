@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/chzyer/muxque/api"
+	"github.com/chzyer/muxque/cc"
 	"github.com/chzyer/muxque/message"
-	"github.com/chzyer/muxque/utils"
 )
 
 func min(a, b int) int {
@@ -51,7 +51,7 @@ func apiSyncPut(topic string, b *testing.B) {
 	var data []*message.Ins
 	batch := 200
 	for i := 0; i < batch; i++ {
-		d := message.NewData([]byte(utils.RandString(200)))
+		d := message.NewData([]byte(cc.RandString(200)))
 		data = append(data, message.NewByData(d))
 	}
 

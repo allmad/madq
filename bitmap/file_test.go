@@ -6,14 +6,14 @@ import (
 	"os"
 	"testing"
 
-	"github.com/chzyer/muxque/utils"
+	"github.com/chzyer/muxque/cc"
 
 	"gopkg.in/logex.v1"
 )
 
 func TestFileCon(t *testing.T) {
 	n := 100
-	dirname := utils.GetRoot("/test/bitmap.file.con")
+	dirname := cc.GetRoot("/test/bitmap.file.con")
 	os.RemoveAll(dirname)
 
 	f, err := NewFileEx(dirname, 1)
@@ -22,7 +22,7 @@ func TestFileCon(t *testing.T) {
 	}
 	defer f.Close()
 
-	buf := []byte(utils.RandString(3))
+	buf := []byte(cc.RandString(3))
 	off := int64(0)
 	for i := 0; i < n; i++ {
 		n, err := f.WriteAt(buf, off)
@@ -37,7 +37,7 @@ func TestFileCon(t *testing.T) {
 }
 
 func TestFile(t *testing.T) {
-	dirname := utils.GetRoot("/test/bitmap.file")
+	dirname := cc.GetRoot("/test/bitmap.file")
 
 	os.RemoveAll(dirname)
 	f, err := NewFile(dirname)

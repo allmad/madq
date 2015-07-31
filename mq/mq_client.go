@@ -9,11 +9,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/chzyer/muxque/cc"
 	"github.com/chzyer/muxque/message"
 	"github.com/chzyer/muxque/prot"
 	"github.com/chzyer/muxque/rpc"
 	"github.com/chzyer/muxque/topic"
-	"github.com/chzyer/muxque/utils"
 
 	"gopkg.in/logex.v1"
 )
@@ -53,7 +53,7 @@ type Client struct {
 	subscriber map[string]*Context
 	incoming   chan *topic.Reply
 	wg         sync.WaitGroup
-	state      utils.State
+	state      cc.State
 	stopChan   chan struct{}
 	errChan    chan error
 	putErrChan chan *topic.PutError
@@ -65,7 +65,7 @@ func NewClient(que *Muxque, conn net.Conn) *Client {
 		incoming:   make(topic.Chan),
 		que:        que,
 		conn:       conn,
-		state:      utils.InitState,
+		state:      cc.InitState,
 		subscriber: make(map[string]*Context, 1<<3),
 		stopChan:   make(chan struct{}),
 		errChan:    make(chan error, 1<<3),

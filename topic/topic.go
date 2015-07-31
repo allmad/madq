@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/chzyer/muxque/bitmap"
+	"github.com/chzyer/muxque/cc"
 	"github.com/chzyer/muxque/message"
 	"github.com/chzyer/muxque/prot"
-	"github.com/chzyer/muxque/utils"
 	"gopkg.in/logex.v1"
 )
 
@@ -53,10 +53,10 @@ type Ins struct {
 	config *Config
 	index  int
 	file   *bitmap.File
-	writer *utils.Writer
+	writer *cc.Writer
 
 	// linked list for Waiters
-	waiterList *utils.List
+	waiterList *cc.List
 
 	putChan    chan *putArgs
 	getChan    chan *getArgs
@@ -72,7 +72,7 @@ func New(name string, config *Config) (t *Ins, err error) {
 	t = &Ins{
 		config:     config,
 		Name:       name,
-		waiterList: utils.NewList(),
+		waiterList: cc.NewList(),
 		putChan:    make(chan *putArgs, 1<<3),
 		getChan:    make(chan *getArgs, 1<<3),
 		cancelChan: make(chan *getArgs),
@@ -86,14 +86,14 @@ func New(name string, config *Config) (t *Ins, err error) {
 		return nil, logex.Trace(err)
 	}
 
-	t.writer = &utils.Writer{t.file, t.file.Size()}
+	t.writer = &cc.Writer{t.file, t.file.Size()}
 	t.Require()
 	go t.ioLoop()
 	return t, nil
 }
 
 func (t *Ins) nameEncoded() string {
-	return utils.PathEncode(t.Name)
+	return cc.PathEncode(t.Name)
 }
 
 func (t *Ins) Require() error {
@@ -298,7 +298,7 @@ func (t *Ins) get(arg *getArgs, mustReply bool) error {
 	var header message.Header
 
 	// check offset
-	r := &utils.Reader{t.file, arg.offset}
+	r := &cc.Reader{t.file, arg.offset}
 	p := 0
 	for i := 0; i < arg.size; i++ {
 		msg, err = message.Read(&header, r, message.RF_RESEEK_ON_FAULT)

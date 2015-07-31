@@ -7,8 +7,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/chzyer/muxque/cc"
 	"github.com/chzyer/muxque/message"
-	"github.com/chzyer/muxque/utils"
 	"gopkg.in/logex.v1"
 )
 
@@ -19,7 +19,7 @@ var (
 func init() {
 	c = new(Config)
 	c.ChunkBit = 22
-	c.Root = utils.GetRoot("/test/topic")
+	c.Root = cc.GetRoot("/test/topic")
 	os.MkdirAll(c.Root, 0777)
 	os.RemoveAll(c.Root)
 }
@@ -34,7 +34,7 @@ func BenchmarkTopicGet(b *testing.B) {
 	topic, _ = New("bench-get", c)
 	defer topic.Release()
 
-	bin := strings.Repeat(utils.RandString(1), 256)
+	bin := strings.Repeat(cc.RandString(1), 256)
 	data := message.NewData([]byte(bin))
 
 	msg := message.NewByData(data)
@@ -80,7 +80,7 @@ func BenchmarkTopicPut(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	msg := message.NewByData(message.NewData([]byte(utils.RandString(256))))
+	msg := message.NewByData(message.NewData([]byte(cc.RandString(256))))
 	b.ResetTimer()
 	buffer := []*message.Ins{}
 	for i := 0; i < b.N; i++ {

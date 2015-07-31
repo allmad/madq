@@ -7,15 +7,15 @@ import (
 
 	"gopkg.in/logex.v1"
 
+	"github.com/chzyer/muxque/cc"
 	"github.com/chzyer/muxque/message"
 	"github.com/chzyer/muxque/mq"
 	"github.com/chzyer/muxque/topic"
-	"github.com/chzyer/muxque/utils"
 )
 
 var (
 	conf = &topic.Config{
-		Root:     utils.GetRoot("/test/api"),
+		Root:     cc.GetRoot("/test/api"),
 		ChunkBit: 22,
 	}
 	addr = ":12345"
@@ -68,7 +68,7 @@ func TestConsumer(t *testing.T) {
 	if err != nil {
 		logex.Fatal(err)
 	}
-	m := message.NewByData(message.NewData([]byte(utils.RandString(256))))
+	m := message.NewByData(message.NewData([]byte(cc.RandString(256))))
 	msgs := make([]*message.Ins, config.Size)
 	for i := 0; i < len(msgs); i++ {
 		msgs[i] = m

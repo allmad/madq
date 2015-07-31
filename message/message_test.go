@@ -4,13 +4,13 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/chzyer/muxque/utils"
+	"github.com/chzyer/muxque/cc"
 
 	"gopkg.in/logex.v1"
 )
 
 func BenchmarkNewMessageByData(b *testing.B) {
-	source := NewData([]byte(utils.RandString(256)))
+	source := NewData([]byte(cc.RandString(256)))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		NewByData(source)
@@ -18,7 +18,7 @@ func BenchmarkNewMessageByData(b *testing.B) {
 }
 
 func BenchmarkNewMessageRaw256(b *testing.B) {
-	m := NewByData(NewData([]byte(utils.RandString(256))))
+	m := NewByData(NewData([]byte(cc.RandString(256))))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		New(m.underlay)
@@ -39,7 +39,7 @@ func TestMessage(t *testing.T) {
 	}
 	var header Header
 	{
-		m3, err := Read(&header, utils.NewReaderBuf(m.underlay), RF_DEFAULT)
+		m3, err := Read(&header, cc.NewReaderBuf(m.underlay), RF_DEFAULT)
 		if err != nil {
 			logex.Error(err)
 			t.Fatal(err)
@@ -53,7 +53,7 @@ func TestMessage(t *testing.T) {
 	{
 		prefix := []byte("hello")
 		m.SetMsgId(uint64(len(prefix)))
-		buf := utils.NewReaderBuf(append(prefix, m.underlay...))
+		buf := cc.NewReaderBuf(append(prefix, m.underlay...))
 		m4, err := Read(&header, buf, RF_RESEEK_ON_FAULT)
 		if err != nil {
 			logex.Error(err)
@@ -73,7 +73,7 @@ func TestMessage(t *testing.T) {
 
 		m.SetMsgId(uint64(len(bin)))
 		bin = append(bin, m.underlay...)
-		buf := utils.NewReaderBuf(bin)
+		buf := cc.NewReaderBuf(bin)
 		m5, err := Read(&header, buf, RF_RESEEK_ON_FAULT)
 		if err != nil {
 			logex.Error(err)

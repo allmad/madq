@@ -7,11 +7,11 @@ import (
 	"net"
 	"sync"
 
+	"github.com/chzyer/muxque/cc"
 	"github.com/chzyer/muxque/message"
 	"github.com/chzyer/muxque/prot"
 	"github.com/chzyer/muxque/rpc"
 	"github.com/chzyer/muxque/topic"
-	"github.com/chzyer/muxque/utils"
 
 	"gopkg.in/logex.v1"
 )
@@ -23,7 +23,7 @@ var (
 type Ins struct {
 	Endpoint  string
 	conn      *net.TCPConn
-	state     utils.State
+	state     cc.State
 	reqQueue  *list.List
 	reqChan   chan *Request
 	w         *bufio.Writer
@@ -43,7 +43,7 @@ func New(endpoint string) (*Ins, error) {
 	a := &Ins{
 		Endpoint:  endpoint,
 		conn:      conn.(*net.TCPConn),
-		state:     utils.InitState,
+		state:     cc.InitState,
 		reqQueue:  list.New(),
 		reqChan:   make(chan *Request, 1<<3),
 		replyChan: make(chan *topic.Reply, 1024),

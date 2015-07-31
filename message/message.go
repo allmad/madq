@@ -7,7 +7,7 @@ import (
 	"io"
 	"math"
 
-	"github.com/chzyer/muxque/utils"
+	"github.com/chzyer/muxque/cc"
 	"github.com/klauspost/crc32"
 	"gopkg.in/logex.v1"
 )
@@ -27,7 +27,7 @@ var (
 	ErrInvalidLength    = logex.Define("invalid message: length short")
 	ErrChecksumNotMatch = logex.Define("message checksum not match")
 	ErrMessageTooLarge  = logex.Define("message size exceed limit")
-	ErrReadFlagInvalid  = logex.Define("set ReadFlag to RF_RESEEK_ON_FAULT required r is *utils.Reader")
+	ErrReadFlagInvalid  = logex.Define("set ReadFlag to RF_RESEEK_ON_FAULT required r is *cc.Reader")
 	ErrReseekReachLimit = logex.Define("reseek reach size limit")
 	ErrMsgIdNotMatch    = logex.Define("message id not match as expect")
 
@@ -121,7 +121,7 @@ func Read(reuseBuf *Header, reader io.Reader, rf ReadFlag) (*Ins, error) {
 	}
 
 	// reseekable and allow reseek on fault
-	r, ok := reader.(*utils.Reader)
+	r, ok := reader.(*cc.Reader)
 	if !ok {
 		panic(ErrReadFlagInvalid)
 	}
@@ -154,7 +154,7 @@ func Read(reuseBuf *Header, reader io.Reader, rf ReadFlag) (*Ins, error) {
 func read(reuseBuf *Header, r io.Reader) (int, *Ins, error) {
 	header := reuseBuf[:]
 	var expectMsgId *uint64
-	if r, ok := r.(*utils.Reader); ok {
+	if r, ok := r.(*cc.Reader); ok {
 		off := uint64(r.Offset)
 		expectMsgId = &off
 	}
