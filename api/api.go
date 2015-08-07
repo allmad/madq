@@ -7,11 +7,10 @@ import (
 	"net"
 	"sync"
 
-	"github.com/chzyer/muxque/cc"
-	"github.com/chzyer/muxque/prot"
-	"github.com/chzyer/muxque/prot/message"
+	"github.com/chzyer/muxque/muxque/topic"
 	"github.com/chzyer/muxque/rpc"
-	"github.com/chzyer/muxque/topic"
+	"github.com/chzyer/muxque/rpc/message"
+	"github.com/chzyer/muxque/utils"
 
 	"gopkg.in/logex.v1"
 )
@@ -23,7 +22,7 @@ var (
 type Ins struct {
 	Endpoint  string
 	conn      *net.TCPConn
-	state     cc.State
+	state     utils.State
 	reqQueue  *list.List
 	reqChan   chan *Request
 	w         *bufio.Writer
@@ -43,7 +42,7 @@ func New(endpoint string) (*Ins, error) {
 	a := &Ins{
 		Endpoint:  endpoint,
 		conn:      conn.(*net.TCPConn),
-		state:     cc.InitState,
+		state:     utils.InitState,
 		reqQueue:  list.New(),
 		reqChan:   make(chan *Request, 1<<3),
 		replyChan: make(chan *topic.Reply, 1024),
@@ -104,7 +103,7 @@ func (a *Ins) readLoop() {
 	)
 
 	r := bufio.NewReader(a.conn)
-	msgStruct := prot.NewStruct(nil)
+	msgStruct := rpc.NewStruct(nil)
 
 	for !a.state.IsClosed() {
 		pt, err = r.ReadByte()
@@ -114,7 +113,7 @@ func (a *Ins) readLoop() {
 			}
 			return
 		}
-		if pt == prot.FlagMsgPush[0] {
+		if pt == rpc.FlagMsgPush[0] {
 			var reply topic.Reply
 			if err = msgStruct.Set(&reply).PSet(r); err != nil {
 				logex.Error(err)
@@ -123,7 +122,7 @@ func (a *Ins) readLoop() {
 			a.replyChan <- &reply
 			continue
 		}
-		if pt != prot.FlagReply[0] {
+		if pt != rpc.FlagReply[0] {
 			logex.Error("unexpect packetType:", pt)
 			return
 		}
@@ -152,40 +151,40 @@ func (a *Ins) Close() {
 }
 
 func (a *Ins) Get(topicName string, offset int64, size int) error {
-	var err prot.Error
-	a.doReq(rpc.MGet, []prot.Item{
-		prot.NewString(topicName),
-		prot.NewInt64(uint64(offset)),
-		prot.NewInt64(uint64(size)),
+	var err rpc.Error
+	a.doReq(rpc.MGet, []rpc.Item{
+		rpc.NewString(topicName),
+		rpc.NewInt64(uint64(offset)),
+		rpc.NewInt64(uint64(size)),
 	}, &err)
 	return err.Err()
 }
 
 func (a *Ins) Put(topicName string, msgs []*message.Ins) (int, error) {
 	var err topic.PutError
-	a.doReq(rpc.MPut, []prot.Item{
-		prot.NewString(topicName),
-		prot.NewMsgs(msgs),
-	}, prot.NewStruct(&err))
+	a.doReq(rpc.MPut, []rpc.Item{
+		rpc.NewString(topicName),
+		rpc.NewMsgs(msgs),
+	}, rpc.NewStruct(&err))
 	return err.N, err.Err
 }
 
-func (a *Ins) doReq(m *prot.String, args []prot.Item, reply prot.Item) {
+func (a *Ins) doReq(m *rpc.String, args []rpc.Item, reply rpc.Item) {
 	req := NewRequest(m, args, reply)
 	a.reqChan <- req
 	<-req.Reply
 }
 
-func (a *Ins) Ping(payload *prot.String) error {
-	perr := prot.NewError(nil)
-	a.doReq(rpc.MPing, []prot.Item{payload}, perr)
+func (a *Ins) Ping(payload *rpc.String) error {
+	perr := rpc.NewError(nil)
+	a.doReq(rpc.MPing, []rpc.Item{payload}, perr)
 	return perr.Err()
 }
 
 func (a *Ins) Delete(topicName string) error {
-	perr := prot.NewError(nil)
-	a.doReq(rpc.MDelete, []prot.Item{
-		prot.NewString(topicName),
+	perr := rpc.NewError(nil)
+	a.doReq(rpc.MDelete, []rpc.Item{
+		rpc.NewString(topicName),
 	}, perr)
 	err := perr.Err()
 	if err == nil {
@@ -198,14 +197,14 @@ func (a *Ins) Delete(topicName string) error {
 }
 
 type Request struct {
-	Method   *prot.String
-	Args     []prot.Item
+	Method   *rpc.String
+	Args     []rpc.Item
 	Reply    chan struct{}
-	replyObj prot.Item
+	replyObj rpc.Item
 	GenReply func(r io.Reader)
 }
 
-func NewRequest(method *prot.String, args []prot.Item, reply prot.Item) *Request {
+func NewRequest(method *rpc.String, args []rpc.Item, reply rpc.Item) *Request {
 	return &Request{
 		Method:   method,
 		Args:     args,
@@ -215,9 +214,9 @@ func NewRequest(method *prot.String, args []prot.Item, reply prot.Item) *Request
 }
 
 func (r *Request) WriteTo(w *bufio.Writer) error {
-	w.Write(prot.FlagReq)
+	w.Write(rpc.FlagReq)
 	w.Write(r.Method.Bytes())
-	if err := prot.WriteItems(w, r.Args); err != nil {
+	if err := rpc.WriteItems(w, r.Args); err != nil {
 		return logex.Trace(err)
 	}
 	return nil

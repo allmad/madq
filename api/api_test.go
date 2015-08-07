@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chzyer/muxque/prot"
+	"github.com/chzyer/muxque/rpc"
 )
 
 func BenchmarkApiPing(b *testing.B) {
 	que, ln := runServer(b)
 	defer closeServer(que, ln)
-	payload := prot.NewString(strings.Repeat("h", 40000))
+	payload := rpc.NewString(strings.Repeat("h", 40000))
 
 	api, err := New(addr)
 	if err != nil {

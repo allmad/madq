@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	"github.com/chzyer/flagx"
-	"github.com/chzyer/muxque/bitmap"
-	"github.com/chzyer/muxque/cc"
-	"github.com/chzyer/muxque/prot/message"
+	"github.com/chzyer/muxque/rpc/message"
+	"github.com/chzyer/muxque/utils"
+	"github.com/chzyer/muxque/utils/bitmap"
 
 	"gopkg.in/logex.v1"
 )
@@ -50,15 +50,15 @@ func hex(b []byte) {
 func main() {
 	c := NewConfig()
 	if c.MsgBin != "" {
-		msgBin(cc.ByteStr(c.MsgBin))
+		msgBin(utils.ByteStr(c.MsgBin))
 	}
 	if c.MsgId != "" {
-		msgId(cc.ByteStr(c.MsgId))
+		msgId(utils.ByteStr(c.MsgId))
 	}
 	if c.MsgOffset > 0 {
 		msgOffset(c.MsgOffset)
 	}
 	if c.Hex != "" {
-		hex(cc.ByteStr(c.Hex))
+		hex(utils.ByteStr(c.Hex))
 	}
 }

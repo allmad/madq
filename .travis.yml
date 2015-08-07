@@ -13,5 +13,5 @@ before_install:
   - go get github.com/klauspost/crc32
   - go get github.com/chzyer/flagx
 script:
-  - ./goverall.sh
-  - bash -c "$HOME/gopath/bin/goveralls -service=travis-ci -coverprofile=.cover.out  | cat"
+  - make cover
+  - bash -c "goveralls -service=travis-ci -coverprofile=.cover.out | tee"

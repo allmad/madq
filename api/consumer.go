@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/chzyer/muxque/topic"
+	"github.com/chzyer/muxque/muxque/topic"
 
 	"gopkg.in/logex.v1"
 )
