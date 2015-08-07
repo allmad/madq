@@ -3,8 +3,8 @@ package mq
 import (
 	"sync"
 
-	"github.com/chzyer/muxque/message"
 	"github.com/chzyer/muxque/prot"
+	"github.com/chzyer/muxque/prot/message"
 	"github.com/chzyer/muxque/topic"
 	"gopkg.in/logex.v1"
 )

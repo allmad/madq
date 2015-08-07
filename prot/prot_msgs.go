@@ -4,7 +4,8 @@ import (
 	"encoding/binary"
 	"io"
 
-	"github.com/chzyer/muxque/message"
+	"github.com/chzyer/muxque/prot/message"
+
 	"gopkg.in/logex.v1"
 )
 

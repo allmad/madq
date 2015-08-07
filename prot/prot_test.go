@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/chzyer/muxque/message"
+	"github.com/chzyer/muxque/prot/message"
 )
 
 func notexpect(t *testing.T) {

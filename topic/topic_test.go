@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/chzyer/muxque/cc"
-	"github.com/chzyer/muxque/message"
+	"github.com/chzyer/muxque/prot/message"
 	"gopkg.in/logex.v1"
 )
 

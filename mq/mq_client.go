@@ -10,8 +10,8 @@ import (
 	"sync"
 
 	"github.com/chzyer/muxque/cc"
-	"github.com/chzyer/muxque/message"
 	"github.com/chzyer/muxque/prot"
+	"github.com/chzyer/muxque/prot/message"
 	"github.com/chzyer/muxque/rpc"
 	"github.com/chzyer/muxque/topic"
 

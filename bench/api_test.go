@@ -5,7 +5,7 @@ import (
 
 	"github.com/chzyer/muxque/api"
 	"github.com/chzyer/muxque/cc"
-	"github.com/chzyer/muxque/message"
+	"github.com/chzyer/muxque/prot/message"
 )
 
 func min(a, b int) int {
