@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/chzyer/muxque/muxque/topic"
 	"github.com/chzyer/muxque/rpc"
 	"github.com/chzyer/muxque/rpc/message"
 	"github.com/chzyer/muxque/utils"
@@ -50,26 +49,26 @@ type Client struct {
 	que            *Muxque
 	conn           *net.TCPConn
 	subscriber     map[string]*Context
-	incoming       chan *topic.Reply
+	incoming       chan *rpc.Reply
 	wg             sync.WaitGroup
 	state          utils.State
 	stopChan       chan struct{}
 	errChan        chan error
-	putErrChan     chan *topic.PutError
+	putErrChan     chan *rpc.PutError
 	parentStopChan chan struct{}
 	sync.Mutex
 }
 
 func NewClient(que *Muxque, conn *net.TCPConn) *Client {
 	c := &Client{
-		incoming:       make(topic.Chan),
+		incoming:       make(rpc.Chan),
 		que:            que,
 		conn:           conn,
 		state:          utils.InitState,
 		subscriber:     make(map[string]*Context, 1<<3),
 		stopChan:       make(chan struct{}),
 		errChan:        make(chan error, 1<<3),
-		putErrChan:     make(chan *topic.PutError, 1<<3),
+		putErrChan:     make(chan *rpc.PutError, 1<<3),
 		parentStopChan: que.clientComing(),
 	}
 
@@ -97,8 +96,8 @@ func (c *Client) writeLoop() {
 
 	var (
 		err    error
-		putErr *topic.PutError
-		ctx    *topic.Reply
+		putErr *rpc.PutError
+		ctx    *rpc.Reply
 		flag   []byte
 		w      = bufio.NewWriter(c.conn)
 		args   = make([]rpc.Item, 1)

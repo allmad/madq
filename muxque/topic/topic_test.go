@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/chzyer/muxque/rpc"
 	"github.com/chzyer/muxque/rpc/message"
 	"github.com/chzyer/muxque/utils"
 
@@ -52,7 +53,7 @@ func BenchmarkTopicGet(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	reply := make(chan *Reply, 1024)
+	reply := make(chan *rpc.Reply, 1024)
 
 	size := 0
 	off := int64(0)
@@ -112,8 +113,8 @@ func TestTopicCancel(t *testing.T) {
 		[]byte("who are kkk"),
 		[]byte("kjkj"),
 	}
-	incoming := make(chan *Reply, len(testSource))
-	incoming2 := make(chan *Reply, len(testSource))
+	incoming := make(chan *rpc.Reply, len(testSource))
+	incoming2 := make(chan *rpc.Reply, len(testSource))
 	subsize := len(testSource)
 
 	wg.Add(1)
@@ -179,7 +180,7 @@ func TestTopic(t *testing.T) {
 	}
 	wg.Add(len(testSource))
 	go func() {
-		incoming := make(chan *Reply, len(testSource))
+		incoming := make(chan *rpc.Reply, len(testSource))
 		errChan := make(chan error)
 		topic.Get(0, len(testSource), incoming, errChan)
 		idx := 0

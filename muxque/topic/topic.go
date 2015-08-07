@@ -202,43 +202,17 @@ exit:
 
 type putArgs struct {
 	msgs  []*message.Ins
-	reply chan<- *PutError
-}
-
-type PutError struct {
-	N   int
-	Err error
-}
-
-func (p *PutError) PWrite(w io.Writer) (err error) {
-	return logex.Trace(rpc.WriteItems(w, []rpc.Item{
-		rpc.NewInt64(uint64(p.N)),
-		rpc.NewError(p.Err),
-	}))
-}
-
-func (p *PutError) PRead(r io.Reader) (err error) {
-	pn, err := rpc.ReadInt64(r)
-	if err != nil {
-		return logex.Trace(err)
-	}
-	perr, err := rpc.ReadError(r)
-	if err != nil {
-		return logex.Trace(err)
-	}
-	p.N = pn.Int()
-	p.Err = perr.Err()
-	return nil
+	reply chan<- *rpc.PutError
 }
 
 func (t *Ins) PutSync(msgs []*message.Ins) (int, error) {
-	reply := make(chan *PutError)
+	reply := make(chan *rpc.PutError)
 	t.Put(msgs, reply)
 	ret := <-reply
 	return ret.N, ret.Err
 }
 
-func (t *Ins) Put(msgs []*message.Ins, reply chan *PutError) {
+func (t *Ins) Put(msgs []*message.Ins, reply chan *rpc.PutError) {
 	// pa := <-t.putChanPool
 	pa := new(putArgs)
 	pa.msgs = msgs
@@ -258,13 +232,13 @@ func (t *Ins) put(arg *putArgs, timer *time.Timer) {
 			break
 		}
 	}
-	arg.reply <- &PutError{i, err}
+	arg.reply <- &rpc.PutError{i, err}
 }
 
 type getArgs struct {
 	offset int64
 	size   int
-	reply  ReplyChan
+	reply  rpc.ReplyChan
 	err    chan<- error
 
 	// context
@@ -276,13 +250,13 @@ func (g *getArgs) String() string {
 	return fmt.Sprintf("%v:%v", g.offset, g.size)
 }
 
-func (t *Ins) GetSync(offset int64, size int, reply ReplyChan) error {
+func (t *Ins) GetSync(offset int64, size int, reply rpc.ReplyChan) error {
 	errReply := make(chan error)
 	t.Get(offset, size, reply, errReply)
 	return <-errReply
 }
 
-func (t *Ins) Get(offset int64, size int, reply ReplyChan, err chan<- error) {
+func (t *Ins) Get(offset int64, size int, reply rpc.ReplyChan, err chan<- error) {
 	t.getChan <- &getArgs{
 		offset, size, reply, err,
 		offset, size,
@@ -326,7 +300,7 @@ func (t *Ins) get(arg *getArgs, mustReply bool) error {
 	}
 
 	if mustReply || p > 0 {
-		arg.reply <- NewReplyCtx(t.Name, msgs[:p])
+		arg.reply <- rpc.NewReply(t.Name, msgs[:p])
 	}
 	if logex.Equal(err, io.EOF) {
 		err = nil
@@ -352,7 +326,7 @@ func (t *Ins) addToWaiterList(w *Waiter) {
 	}
 }
 
-func (t *Ins) Cancel(offset int64, size int, reply ReplyChan) error {
+func (t *Ins) Cancel(offset int64, size int, reply rpc.ReplyChan) error {
 	errChan := make(chan error)
 	t.cancelChan <- &getArgs{
 		err:     errChan,

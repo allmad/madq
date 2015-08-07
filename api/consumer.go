@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/chzyer/muxque/muxque/topic"
+	"github.com/chzyer/muxque/rpc"
 
 	"gopkg.in/logex.v1"
 )
@@ -16,7 +16,7 @@ type Consumer struct {
 	api       *Ins
 	wg        sync.WaitGroup
 	stopChan  chan struct{}
-	ReplyChan chan *topic.Reply
+	ReplyChan chan *rpc.Reply
 	kickChan  chan struct{}
 	Remain    int64
 }
@@ -30,7 +30,7 @@ func NewConsumer(conf *Config) (*Consumer, error) {
 		api:       api,
 		Config:    conf,
 		stopChan:  make(chan struct{}),
-		ReplyChan: make(chan *topic.Reply, conf.Size),
+		ReplyChan: make(chan *rpc.Reply, conf.Size),
 		kickChan:  make(chan struct{}, 1),
 	}
 	return c, nil
@@ -40,7 +40,7 @@ func (c *Consumer) replyLoop() {
 	c.wg.Add(1)
 	defer c.wg.Done()
 	var (
-		reply *topic.Reply
+		reply *rpc.Reply
 	)
 	for {
 		select {

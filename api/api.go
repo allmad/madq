@@ -7,7 +7,6 @@ import (
 	"net"
 	"sync"
 
-	"github.com/chzyer/muxque/muxque/topic"
 	"github.com/chzyer/muxque/rpc"
 	"github.com/chzyer/muxque/rpc/message"
 	"github.com/chzyer/muxque/utils"
@@ -27,7 +26,7 @@ type Ins struct {
 	reqChan   chan *Request
 	w         *bufio.Writer
 	stopChan  chan struct{}
-	replyChan chan *topic.Reply
+	replyChan chan *rpc.Reply
 	wg        sync.WaitGroup
 
 	sync.Mutex
@@ -45,7 +44,7 @@ func New(endpoint string) (*Ins, error) {
 		state:     utils.InitState,
 		reqQueue:  list.New(),
 		reqChan:   make(chan *Request, 1<<3),
-		replyChan: make(chan *topic.Reply, 1024),
+		replyChan: make(chan *rpc.Reply, 1024),
 		stopChan:  make(chan struct{}),
 		w:         bufio.NewWriter(conn),
 	}
@@ -54,7 +53,7 @@ func New(endpoint string) (*Ins, error) {
 	return a, nil
 }
 
-func (a *Ins) ReplyChan() chan *topic.Reply {
+func (a *Ins) ReplyChan() chan *rpc.Reply {
 	return a.replyChan
 }
 
@@ -114,7 +113,7 @@ func (a *Ins) readLoop() {
 			return
 		}
 		if pt == rpc.FlagMsgPush[0] {
-			var reply topic.Reply
+			var reply rpc.Reply
 			if err = msgStruct.Set(&reply).PSet(r); err != nil {
 				logex.Error(err)
 				continue
@@ -161,7 +160,7 @@ func (a *Ins) Get(topicName string, offset int64, size int) error {
 }
 
 func (a *Ins) Put(topicName string, msgs []*message.Ins) (int, error) {
-	var err topic.PutError
+	var err rpc.PutError
 	a.doReq(rpc.MPut, []rpc.Item{
 		rpc.NewString(topicName),
 		rpc.NewMsgs(msgs),
