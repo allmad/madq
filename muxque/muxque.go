@@ -31,13 +31,14 @@ func NewMuxque(topicCfg *topic.Config) (*Muxque, error) {
 	return m, nil
 }
 
-func (m *Muxque) deleteTopic(name string) {
+func (m *Muxque) deleteTopic(name *rpc.String) {
 	m.Lock()
-	delete(m.topics, name)
+	delete(m.topics, name.String())
 	m.Unlock()
 }
 
-func (m *Muxque) getTopic(name string, gen bool) (ins *topic.Ins, err error) {
+func (m *Muxque) getTopic(topicName *rpc.String, gen bool) (ins *topic.Ins, err error) {
+	name := topicName.String()
 	m.RLock()
 	ins = m.topics[name]
 	m.RUnlock()
@@ -76,7 +77,7 @@ func (m *Muxque) getTopic(name string, gen bool) (ins *topic.Ins, err error) {
 	return ins, nil
 }
 
-func (m *Muxque) Delete(topicName string, reply chan error) {
+func (m *Muxque) Delete(topicName *rpc.String, reply chan error) {
 	t, err := m.getTopic(topicName, true)
 	if err != nil {
 		reply <- err
@@ -91,7 +92,7 @@ func (m *Muxque) Delete(topicName string, reply chan error) {
 	}()
 }
 
-func (m *Muxque) Put(topicName string, data []*message.Ins, reply chan *rpc.PutError) {
+func (m *Muxque) Put(topicName *rpc.String, data []*message.Ins, reply chan *rpc.PutError) {
 	t, err := m.getTopic(topicName, true)
 	if err != nil {
 		reply <- &rpc.PutError{0, logex.Trace(err)}
@@ -102,7 +103,7 @@ func (m *Muxque) Put(topicName string, data []*message.Ins, reply chan *rpc.PutE
 }
 
 func (m *Muxque) Get(topicName *rpc.String, offset int64, size int, reply rpc.ReplyChan, errChan chan error) {
-	t, err := m.getTopic(topicName.String(), true)
+	t, err := m.getTopic(topicName, true)
 	if err != nil {
 		errChan <- logex.Trace(err)
 		return
@@ -111,7 +112,7 @@ func (m *Muxque) Get(topicName *rpc.String, offset int64, size int, reply rpc.Re
 	t.Release()
 }
 
-func (m *Muxque) CancelSync(topicName string, offset int64, size int, reply rpc.ReplyChan) error {
+func (m *Muxque) Cancel(topicName *rpc.String, offset int64, size int, reply rpc.ReplyChan) error {
 	t, err := m.getTopic(topicName, false)
 	if err != nil {
 		return logex.Trace(err)

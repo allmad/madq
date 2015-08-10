@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	CacheSize       = 8
+	CacheSize       = 4
 	DefaultChunkBit = 22
 )
 

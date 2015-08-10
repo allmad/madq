@@ -4,12 +4,61 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/chzyer/muxque/utils"
 
 	"gopkg.in/logex.v1"
 )
+
+func BenchmarkWrite256(b *testing.B) {
+	benchmarkSize(b, 256)
+}
+func BenchmarkWrite256N(b *testing.B) {
+	b.Skip()
+	benchmarkFileSize(b, 256)
+}
+
+func BenchmarkWriteBig256(b *testing.B) {
+	benchmarkSize(b, 256*100)
+}
+
+func benchmarkFileSize(b *testing.B, size int) {
+	fileName := utils.GetRoot("/test/bitmap/normalfile")
+	os.RemoveAll(fileName)
+
+	f, _ := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE, 0600)
+	b.SetBytes(int64(size))
+	data := make([]byte, size)
+	b.StartTimer()
+
+	for i := 0; i < b.N; i++ {
+		f.Write(data)
+	}
+	f.Sync()
+}
+
+func benchmarkSize(b *testing.B, size int) {
+	fileName := utils.GetRoot("/test/bitmap/benchmark")
+	os.RemoveAll(fileName)
+
+	f, err := NewFileEx(fileName, 22)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer func() {
+		f.Delete()
+	}()
+
+	b.ResetTimer()
+	data := []byte(strings.Repeat(utils.RandString(1), size))
+	w := utils.Writer{f, 0}
+	for i := 0; i < b.N; i++ {
+		w.Write(data)
+		b.SetBytes(int64(len(data)))
+	}
+}
 
 func TestFileCon(t *testing.T) {
 	n := 100

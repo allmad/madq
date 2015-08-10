@@ -260,7 +260,7 @@ func (c *Client) Put(r *bufio.Reader) error {
 		return logex.Trace(err)
 	}
 
-	c.que.Put(topicName.String(), msgs.Msgs(), c.putErrChan)
+	c.que.Put(topicName, msgs.Msgs(), c.putErrChan)
 	return nil
 }
 
@@ -269,7 +269,7 @@ func (c *Client) Delete(r *bufio.Reader) error {
 	if err != nil {
 		return logex.Trace(err)
 	}
-	c.que.Delete(topicName.String(), c.errChan)
+	c.que.Delete(topicName, c.errChan)
 	return nil
 }
 
