@@ -15,6 +15,7 @@ muxque is design to use in IM, follows pub/sub model, to achieve serve millions 
 * distributed and decentralized topologies without single points of failure
 * the number of topic can be unlimit(depends on hardware)
 * provide a horizontally scaling solution
+* using different way to support large number of topic (configurable)
 
 
 ### roadmap
