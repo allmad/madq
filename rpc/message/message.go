@@ -242,6 +242,10 @@ func (m *Ins) NextOff() int64 {
 	return int64(len(m.underlay)) + int64(m.MsgId)
 }
 
+func (m *Ins) Size() int {
+	return len(m.underlay)
+}
+
 func (m *Ins) Bytes() []byte {
 	return m.underlay
 }

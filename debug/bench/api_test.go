@@ -30,6 +30,7 @@ func BenchmarkApiSyncGet(b *testing.B) {
 	for total > 0 {
 		read := min(total, bench)
 		total -= read
+
 		if err := client.Get(topic, offset, read); err != nil {
 			b.Fatal(err)
 		}
@@ -61,7 +62,6 @@ func apiSyncPut(topic string, b *testing.B) {
 	}
 	defer client.Close()
 
-	buffer := 0
 	if b.N < batch {
 		_, err := client.Put(topic, data[:b.N])
 		if err != nil {
@@ -69,12 +69,7 @@ func apiSyncPut(topic string, b *testing.B) {
 		}
 		return
 	}
-	for i := 0; i < b.N; i++ {
-		if buffer < batch {
-			buffer++
-			continue
-		}
-		buffer = 0
+	for i := 0; i < b.N; i += batch {
 		_, err := client.Put(topic, data)
 		if err != nil {
 			b.Error(err)

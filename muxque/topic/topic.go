@@ -1,6 +1,7 @@
 package topic
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"sync"
@@ -221,6 +222,27 @@ func (t *Ins) Put(msgs []*message.Ins, reply chan *rpc.PutError) {
 }
 
 func (t *Ins) put(arg *putArgs, timer *time.Timer) {
+	var (
+		size int
+		err  error
+	)
+	offset := uint64(t.writer.Offset)
+	for i := 0; i < len(arg.msgs); i++ {
+		arg.msgs[i].SetMsgId(offset)
+		size += arg.msgs[i].Size()
+		offset += uint64(arg.msgs[i].Size())
+	}
+
+	buf := bytes.NewBuffer(make([]byte, 0, size))
+	for i := 0; i < len(arg.msgs); i++ {
+		arg.msgs[i].WriteTo(buf)
+	}
+
+	_, err = buf.WriteTo(t.writer)
+	arg.reply <- &rpc.PutError{len(arg.msgs), logex.Trace(err)}
+}
+
+func (t *Ins) putSep(arg *putArgs, timer *time.Timer) {
 	var (
 		err error
 		i   int

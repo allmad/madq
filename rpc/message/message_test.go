@@ -1,6 +1,11 @@
 package message
 
 import (
+	"bufio"
+	"bytes"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -22,6 +27,50 @@ func BenchmarkUnmarshal(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		New(m.underlay)
+	}
+}
+
+func BenchmarkRead(b *testing.B) {
+	m := NewByData(NewData([]byte(utils.RandString(256))))
+	buf := bytes.NewBuffer(make([]byte, 0, m.Size()*b.N))
+	for i := 0; i < b.N; i++ {
+		m.WriteTo(buf)
+	}
+	b.ResetTimer()
+	var header Header
+	for i := 0; i < b.N; i++ {
+		_, err := Read(&header, buf, RF_RESEEK_ON_FAULT)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkReadDisk(b *testing.B) {
+	m := NewByData(NewData([]byte(utils.RandString(256))))
+	buf := bytes.NewBuffer(make([]byte, 0, m.Size()*b.N))
+	for i := 0; i < b.N; i++ {
+		m.WriteTo(buf)
+	}
+	path := utils.GetRoot("/test/message/tmp")
+	os.MkdirAll(filepath.Dir(path), 0777)
+	if err := ioutil.WriteFile(path, buf.Bytes(), 0666); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	f, err := os.Open(path)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer f.Close()
+	r := bufio.NewReader(f)
+	var header Header
+	for i := 0; i < b.N; i++ {
+		_, err := Read(&header, r, RF_RESEEK_ON_FAULT)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
