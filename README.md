@@ -36,6 +36,8 @@ muxque is design to use in IM, follows pub/sub model, to achieve serve millions 
 ### benchmark
 ---
 
+**the size of each messages is 200, the bench size of messages on each request is 200 too**
+
 * http test
 
 ```

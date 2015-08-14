@@ -16,6 +16,7 @@ const (
 	FlagMsgs
 	FlagError
 	FlagStruct
+	FlagArray
 )
 
 var (
@@ -79,6 +80,7 @@ func WriteItem(w io.Writer, item Item) (err error) {
 	return nil
 }
 
+// TODO: using buffer to write once?!
 func WriteItems(w io.Writer, items []Item) (err error) {
 	for i := 0; i < len(items); i++ {
 		if err = WriteItem(w, items[i]); err != nil {
