@@ -88,6 +88,19 @@ type Ins struct {
 	underlay []byte
 }
 
+type magicReader struct {
+	eof bool
+}
+
+func (m *magicReader) Read(b []byte) (int, error) {
+	if m.eof {
+		return 0, io.EOF
+	}
+	n := copy(b, MagicBytes)
+	m.eof = true
+	return n, nil
+}
+
 func NewByBin(b []byte) *Ins {
 	return NewByData(NewData(b))
 }
@@ -121,31 +134,30 @@ func Read(reuseBuf *Header, reader io.Reader, rf ReadFlag) (*Ins, error) {
 	}
 
 	// reseekable and allow reseek on fault
-	r, ok := reader.(*utils.Reader)
+	r, ok := reader.(*utils.Bufio)
 	if !ok {
 		panic(ErrReadFlagInvalid)
 	}
-	r.Offset -= int64(n) - 1
-	offset := r.Offset
+	r.Offset(r.Offset(-1) - int64(n) + 1)
+	offset := r.Offset(-1)
 	logex.Errorf("begin to reseek, offset: (%v), why: (%v)", offset, err)
 
-	buf := bufio.NewReader(r)
-	for r.Offset-offset < MaxReseekBytes {
-		_, err := buf.ReadSlice(MagicByte)
+	for r.Offset(-1)-offset < MaxReseekBytes {
+		_, err := r.ReadSlice(MagicByte)
 		if err == bufio.ErrBufferFull {
 			continue
 		}
 		if err != nil {
 			return nil, logex.Trace(err)
 		}
-		r.Offset -= int64(buf.Buffered()) + 1
+		if errUnread := r.UnreadByte(); errUnread != nil {
+			return nil, logex.Trace(err)
+		}
 		n, msg, err = read(reuseBuf, r)
 		if !logex.EqualAny(err, ErrReseekable) {
 			return msg, logex.Trace(err)
 		}
-
-		r.Offset -= int64(n) - 1
-		buf.Reset(r)
+		r.Offset(r.Offset(-1) - int64(n) + 1)
 		continue
 	}
 	return nil, ErrReseekReachLimit.Trace()
@@ -154,8 +166,8 @@ func Read(reuseBuf *Header, reader io.Reader, rf ReadFlag) (*Ins, error) {
 func read(reuseBuf *Header, r io.Reader) (int, *Ins, error) {
 	header := reuseBuf[:]
 	var expectMsgId *uint64
-	if r, ok := r.(*utils.Reader); ok {
-		off := uint64(r.Offset)
+	if r, ok := r.(*utils.Bufio); ok {
+		off := uint64(r.Offset(-1))
 		expectMsgId = &off
 	}
 

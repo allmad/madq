@@ -45,7 +45,7 @@ func BenchmarkApiSyncGet(b *testing.B) {
 }
 
 func BenchmarkApiSyncPut(b *testing.B) {
-	apiSyncPut("api-test", b)
+	apiSyncPut("api-put", b)
 }
 
 func apiSyncPut(topic string, b *testing.B) {

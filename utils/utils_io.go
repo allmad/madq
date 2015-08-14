@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bufio"
 	"bytes"
 	"io"
 
@@ -11,29 +12,62 @@ var (
 	ErrSeekNotSupport = logex.Define("seek with whence(2) is not supported")
 )
 
-type Buffer struct {
+type Bufio struct {
+	*bufio.Reader
+	underlay *Reader
+}
+
+func NewBufio(r *Reader) *Bufio {
+	b := Bufio{
+		Reader:   bufio.NewReader(r),
+		underlay: r,
+	}
+	return &b
+}
+
+func (b *Bufio) UnreadBytes(n int) (err error) {
+	offset := b.Offset(-1)
+	for i := 0; i < n; i++ {
+		if err = b.Reader.UnreadByte(); err != nil {
+			b.Offset(offset)
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *Bufio) Offset(o int64) int64 {
+	oldOff := b.underlay.Offset - int64(b.Buffered())
+	if o >= 0 {
+		b.underlay.Offset = o
+		b.Reader.Reset(b.underlay)
+	}
+	return oldOff
+}
+
+type Block struct {
 	*bytes.Reader
 	Buf []byte
 	off int
 }
 
-func NewBuffer(buf []byte) *Buffer {
+func NewBlock(buf []byte) *Block {
 	bb := bytes.NewReader(buf)
 	_ = bb
-	b := Buffer{
+	b := Block{
 		Buf: buf,
 	}
 	b.Reader = bb
 	return &b
 }
 
-func (r *Buffer) Read(b []byte) (int, error) {
+func (r *Block) Read(b []byte) (int, error) {
 	n, err := r.Reader.Read(b)
 	r.off += n
 	return n, err
 }
 
-func (r *Buffer) Bytes() []byte {
+func (r *Block) Bytes() []byte {
 	return r.Buf[r.off:]
 }
 
@@ -42,8 +76,8 @@ type Reader struct {
 	Offset int64
 }
 
-func NewReaderBuf(b []byte) *Reader {
-	return &Reader{NewBuffer(b), 0}
+func NewReaderBlock(b []byte) *Bufio {
+	return NewBufio(&Reader{NewBlock(b), 0})
 }
 
 func (r *Reader) Read(val []byte) (n int, err error) {

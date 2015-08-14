@@ -221,20 +221,23 @@ func (t *Ins) Put(msgs []*message.Ins, reply chan *rpc.PutError) {
 	t.putChan <- pa
 }
 
+var a bool
+
 func (t *Ins) put(arg *putArgs, timer *time.Timer) {
 	var (
 		size int
 		err  error
 	)
-	offset := uint64(t.writer.Offset)
+
 	for i := 0; i < len(arg.msgs); i++ {
-		arg.msgs[i].SetMsgId(offset)
 		size += arg.msgs[i].Size()
-		offset += uint64(arg.msgs[i].Size())
 	}
 
 	buf := bytes.NewBuffer(make([]byte, 0, size))
+	offset := uint64(t.writer.Offset)
 	for i := 0; i < len(arg.msgs); i++ {
+		arg.msgs[i].SetMsgId(offset)
+		offset += uint64(arg.msgs[i].Size())
 		arg.msgs[i].WriteTo(buf)
 	}
 
@@ -304,14 +307,14 @@ func (t *Ins) get(arg *getArgs, mustReply bool) error {
 	var header message.Header
 
 	// check offset
-	r := &utils.Reader{t.file, arg.offset}
+	r := utils.NewBufio(&utils.Reader{t.file, arg.offset})
 	p := 0
 	for i := 0; i < arg.size; i++ {
 		msg, err = message.Read(&header, r, message.RF_RESEEK_ON_FAULT)
-		err = logex.Trace(err, i)
+		err = logex.Trace(err, i, arg.offset)
 		if logex.EqualAny(err, ErrNeedAddToWaiter) {
 			// not finish, add to waiterList
-			t.addToWaiterList(newWaiter(arg, r.Offset, p))
+			t.addToWaiterList(newWaiter(arg, r.Offset(-1), p))
 			break
 		}
 		if err != nil {

@@ -64,6 +64,7 @@ func BenchmarkTopicGet(b *testing.B) {
 		}
 
 		if err := topic.GetSync(off, size, reply); err != nil {
+			logex.Error(err)
 			b.Fatal(err)
 		}
 

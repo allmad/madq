@@ -39,37 +39,36 @@ muxque is design to use in IM, follows pub/sub model, to achieve serve millions 
 * http test
 
 ```
-$ go run bench/httpserver/server.go
+$ go run debug/bench/httpserver/server.go
 $ make bench-http
-go test -v -benchtime 10s -benchmem -bench=Http -run=Nothing github.com/chzyer/muxque/bench
+go test -v -benchtime 10s -benchmem -bench=Http -run=Nothing github.com/chzyer/muxque/debug/bench | scripts/addops.awk
 testing: warning: no tests to run
 PASS
-BenchmarkHttpPut	 3000000	      4808 ns/op (aka 207,986 rps)	      16 B/op	       0 allocs/op
-ok  	github.com/chzyer/muxque/bench	18.811s
+BenchmarkHttpPut	 5000000	      2478 ns/op (403551 op/s) 		      16 B/op	       0 allocs/op
+ok  	github.com/chzyer/muxque/debug/bench	14.875s
 ```
 
 * sync api (single client wait until server reply)
 
 ```
-$ go run muxque.go
 $ make bench-sync-api
-go test -v -benchtime 10s -benchmem -bench=ApiSync -run=Nothing github.com/chzyer/muxque/bench
+go test -v -benchtime 10s -benchmem -bench=ApiSync -run=Nothing github.com/chzyer/muxque/debug/bench | scripts/addops.awk
 testing: warning: no tests to run
 PASS
-BenchmarkApiSyncGet	 3000000	      4540 ns/op (aka 220,264 rps)	     332 B/op	       3 allocs/op
-BenchmarkApiSyncPut	 5000000	      3355 ns/op (aka 298,062 rps)	       2 B/op	       0 allocs/op
-ok  	github.com/chzyer/muxque/bench	52.065s
+BenchmarkApiSyncGet	 5000000	      2502 ns/op (399680 op/s) 		     332 B/op	       3 allocs/op
+BenchmarkApiSyncPut	10000000	      1921 ns/op (520562 op/s) 		       2 B/op	       0 allocs/op
+ok  	github.com/chzyer/muxque/debug/bench	48.126s
 ```
 
 * internal test (without network)
 
 ```
 $ make bench-topic
-go test -v -benchtime 10s -benchmem -bench=. -run=Nothing github.com/chzyer/muxque/topic
+go test -v -benchtime 10s -benchmem -bench=. -run=Nothing github.com/chzyer/muxque/muxque/topic | scripts/addops.awk
 PASS
-BenchmarkTopicGet	 5000000	      2805 ns/op (356,506 rps)	     432 B/op	       8 allocs/op
-BenchmarkTopicPut	 5000000	      2622 ns/op (381,388 rps)	     119 B/op	       3 allocs/op
-ok  	github.com/chzyer/muxque/topic	46.333s
+BenchmarkTopicGet	20000000	      1839 ns/op (543774 op/s) 		 146.24 MB/s	     430 B/op	       5 allocs/op
+BenchmarkTopicPut	20000000	      1034 ns/op (967118 op/s) 		 260.06 MB/s	     405 B/op	       2 allocs/op
+ok  	github.com/chzyer/muxque/muxque/topic	73.963s
 ```
 
 * nsq
