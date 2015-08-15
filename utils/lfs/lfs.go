@@ -1,6 +1,7 @@
 package lfs
 
 import (
+	"bytes"
 	"sync"
 
 	"github.com/chzyer/muxque/utils"
@@ -13,6 +14,10 @@ const (
 	SegmentSizeBit = 22
 )
 
+var (
+	ErrWriteShort = logex.Define("write too short")
+)
+
 type checkPoint struct {
 	blkOff int64
 	data   map[string]int64
@@ -21,8 +26,10 @@ type checkPoint struct {
 // log structured file system implementation
 // provide sequence-write/random-read on large topics
 type Ins struct {
-	cfg *Config
-	cp  *checkPoint
+	cfg     *Config
+	cp      *checkPoint
+	cpGuard sync.Mutex
+
 	rfd *bitmap.File
 	wfd *bitmap.File
 
@@ -31,21 +38,30 @@ type Ins struct {
 }
 
 type Config struct {
-	BasePath       string
-	BlockSize      int
-	SegmentSizeBit int
+	BasePath   string
+	BlockBit   uint
+	SegmentBit int
+
+	blockSize  int
+	emptyBlock []byte
 }
 
-func (c *Config) init() {
-	if c.BlockSize == 0 {
-		c.BlockSize = 1 << 12
+func (c *Config) init() error {
+	if c.BlockBit == 0 {
+		c.BlockBit = 12
 	}
-	if c.SegmentSizeBit == 0 {
-		c.SegmentSizeBit = 22
+	if c.SegmentBit == 0 {
+		c.SegmentBit = 22
 	}
+	c.blockSize = 1 << c.BlockBit
+	c.emptyBlock = make([]byte, c.blockSize)
+	return nil
 }
 
 func New(cfg *Config) (*Ins, error) {
+	if err := cfg.init(); err != nil {
+		return nil, logex.Trace(err)
+	}
 	rfd, err := bitmap.NewFile(cfg.BasePath)
 	if err != nil {
 		return nil, logex.Trace(err)
@@ -92,11 +108,25 @@ func (i *Ins) OpenWriter(name string) (*utils.Writer, error) {
 }
 
 func (i *Ins) Open(name string) (*File, error) {
-	return OpenFile(i, nil, name)
+	return OpenFile(i, NewInode(name, i.cfg.blockSize), name)
 }
 
-func (i *Ins) getFreeBlkOffset() int64 {
-	return i.cp.blkOff
+func (i *Ins) calBlockSize(size int) int {
+	blockSize := size >> i.cfg.BlockBit
+	if size&(i.cfg.blockSize-1) != 0 {
+		blockSize++
+	}
+	return blockSize
+}
+
+// return offsets
+func (i *Ins) allocBlocks(p []byte) (startOff int64, size int) {
+	blockSize := i.calBlockSize(len(p))
+	i.cpGuard.Lock()
+	startOff = i.cp.blkOff
+	i.cp.blkOff += int64(blockSize) * int64(i.cfg.blockSize)
+	i.cpGuard.Unlock()
+	return startOff, blockSize
 }
 
 func (i *Ins) closeFile(f *File) error {
@@ -110,8 +140,50 @@ func (i *Ins) readAt(f *File, p []byte, off int64) (int, error) {
 	return i.rfd.ReadAt(p, off)
 }
 
-func (i *Ins) writeAt(f *File, p []byte, off int64) (int, error) {
-	return i.wfd.WriteAt(p, off)
+func (o *Ins) fillBuf(p []byte, extendSize int) ([]byte, int) {
+	fillsize := 0
+	out := len(p) & (o.cfg.blockSize - 1)
+	if out > 0 {
+		fillsize += o.cfg.blockSize - out
+		p = append(p, o.cfg.emptyBlock[:o.cfg.blockSize-out]...)
+	}
+	for i := 0; i < extendSize; i++ {
+		fillsize += o.cfg.blockSize
+		p = append(p, o.cfg.emptyBlock...)
+	}
+	return p, fillsize
+}
+
+func (o *Ins) calInoRawSize(newData []byte, ino *Inode) int {
+	return ino.RawSize(o.calBlockSize(len(newData)))
+}
+
+func (o *Ins) writeAt(f *File, p []byte, off int64) (int, error) {
+	inoBlockSize := o.calBlockSize(o.calInoRawSize(p, f.ino))
+	p, fsize := o.fillBuf(p, inoBlockSize)
+	blockOff, size := o.allocBlocks(p)
+	currentBlockSize := len(f.ino.Blocks)
+	for i := 0; i < size; i++ {
+		f.ino.Blocks = append(f.ino.Blocks, blockOff+int64(i*o.cfg.blockSize))
+	}
+	inoOff := len(p) - inoBlockSize*o.cfg.blockSize
+	inoWriter := bytes.NewBuffer(p[inoOff:inoOff])
+	if err := f.ino.PWrite(inoWriter); err != nil {
+		panic(err)
+	}
+	// logex.Info(p)
+
+	logex.Struct(f.ino)
+	// append ino into p
+	n, err := o.wfd.WriteAt(p, f.ino.Blocks[currentBlockSize])
+	if err == nil && n != len(p) {
+		err = ErrWriteShort.Trace(n, len(p))
+	}
+	if err != nil {
+		f.ino.Blocks = f.ino.Blocks[:currentBlockSize]
+		return n, logex.Trace(err)
+	}
+	return n - fsize, nil
 }
 
 func (i *Ins) Pruge() {

@@ -65,6 +65,10 @@ func (p *PutError) PWrite(w io.Writer) (err error) {
 	}))
 }
 
+func (p *PutError) PSize() int {
+	return NewInt64(uint64(p.N)).PSize() + NewError(p.Err).PSize()
+}
+
 func (p *PutError) PRead(r io.Reader) (err error) {
 	pn, err := ReadInt64(r)
 	if err != nil {

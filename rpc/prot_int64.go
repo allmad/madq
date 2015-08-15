@@ -39,6 +39,10 @@ func (i *Int64) PWrite(w io.Writer) error {
 	return binary.Write(w, binary.LittleEndian, i.underlay)
 }
 
+func (i *Int64) PSize() int {
+	return 8
+}
+
 func (i *Int64) Int64() int64 {
 	return int64(i.underlay)
 }

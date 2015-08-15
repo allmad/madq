@@ -12,16 +12,42 @@ import (
 var _ rpc.ItemStruct = new(Inode)
 
 type Inode struct {
-	Size   int64
-	Blocks []int64
+	blockSize int64
+	Name      *rpc.String
+	Blocks    []int64
 }
 
-func (ino *Inode) PRead(r io.Reader) error {
+func NewInode(name string, blockSize int) *Inode {
+	return &Inode{Name: rpc.NewString(name), blockSize: int64(blockSize)}
+}
+
+func (ino *Inode) calBlockOffSize(size int) int {
+	return size * 8
+}
+
+func (ino *Inode) RawSize(newBlockSize int) int {
+	return ino.calBlockOffSize(newBlockSize + len(ino.Blocks))
+}
+
+func (ino *Inode) FileSize() int64 {
+	return int64(len(ino.Blocks)) * ino.blockSize
+}
+
+func (ino *Inode) PSize() int {
+	return 2 + // block length
+		8*len(ino.Blocks) + // block size
+		ino.Name.PSize()
+}
+
+func (ino *Inode) PRead(r io.Reader) (err error) {
+	ino.Name, err = rpc.ReadString(r)
+	if err != nil {
+		return logex.Trace(err)
+	}
 	ps, err := rpc.ReadInt64(r)
 	if err != nil {
 		return logex.Trace(err)
 	}
-	ino.Size = ps.Int64()
 	var length uint16
 	if err := binary.Read(r, binary.LittleEndian, &length); err != nil {
 		return logex.Trace(err)
@@ -38,10 +64,9 @@ func (ino *Inode) PRead(r io.Reader) error {
 }
 
 func (ino *Inode) PWrite(w io.Writer) (err error) {
-	if err = rpc.WriteItem(w, rpc.NewInt64(uint64(ino.Size))); err != nil {
+	if err = rpc.WriteItem(w, ino.Name); err != nil {
 		return logex.Trace(err)
 	}
-
 	if err = binary.Write(w, binary.LittleEndian, uint16(len(ino.Blocks))); err != nil {
 		return logex.Trace(err)
 	}

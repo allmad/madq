@@ -67,3 +67,7 @@ func (i *String) PWrite(w io.Writer) error {
 	}
 	return nil
 }
+
+func (i *String) PSize() int {
+	return 2 + len(i.underlay)
+}

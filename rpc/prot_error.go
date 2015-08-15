@@ -55,6 +55,10 @@ func (e *Error) PWrite(w io.Writer) error {
 	return logex.Trace(s.PWrite(w))
 }
 
+func (e *Error) PSize() int {
+	return (&String{e.underlay}).PSize()
+}
+
 func (e *Error) Flag() byte {
 	return FlagError
 }

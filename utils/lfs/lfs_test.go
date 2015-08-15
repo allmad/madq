@@ -16,8 +16,8 @@ func safeReadExpect(r io.Reader, buf []byte) error {
 		return logex.Trace(err)
 	}
 	if !bytes.Equal(b, buf) {
-		logex.Info(b)
-		logex.Info(buf)
+		logex.Info("readed:", b)
+		logex.Info("expect:", buf)
 		return logex.NewError("read data not expect")
 	}
 	return nil
@@ -63,6 +63,7 @@ func newIns() (*Ins, error) {
 }
 
 func TestSingleRW(t *testing.T) {
+	t.Skip()
 	testData := genBlock(9 << 10)
 	ins, err := newIns()
 	if err != nil {
@@ -92,53 +93,47 @@ func TestSingleRW(t *testing.T) {
 
 func TestTwoRW(t *testing.T) {
 	if err := func() error {
-		data1 := genBlock(20)
-		data2 := genBlock(38)
 		ins, err := newIns()
 		if err != nil {
 			return logex.Trace(err)
 		}
 		defer ins.Close()
+		label := []string{"test1", "test2", "test3", "test4", "test5"}
+		data := [][]byte{genBlock(2), genBlock(20), genBlock(9), genBlock(15), genBlock(ins.cfg.blockSize + 2)}
 
 		{ // write two file once
-			w1, err := ins.OpenWriter("test1")
-			if err != nil {
-				return logex.Trace(err)
-			}
-			defer w1.Close()
-
-			w2, err := ins.OpenWriter("test2")
-			if err != nil {
-				return logex.Trace(err)
-			}
-			defer w2.Close()
-
-			if err := safeWrite(w1, data1); err != nil {
-				return logex.Trace(err)
+			ws := make([]*utils.Writer, len(label))
+			for i, l := range label {
+				w, err := ins.OpenWriter(l)
+				if err != nil {
+					return logex.Trace(err)
+				}
+				ws[i] = w
+				defer w.Close()
 			}
 
-			if err := safeWrite(w1, data2); err != nil {
-				return logex.Trace(err)
+			for i := range label {
+				if err := safeWrite(ws[i], data[i]); err != nil {
+					return logex.Trace(err)
+				}
 			}
 		}
 
 		{ // read two file once
-			r1, err := ins.OpenReader("test1")
-			if err != nil {
-				return logex.Trace(err)
+			rs := make([]*utils.Reader, len(label))
+			for i, l := range label {
+				r, err := ins.OpenReader(l)
+				if err != nil {
+					return logex.Trace(err)
+				}
+				defer r.Close()
+				rs[i] = r
 			}
-			defer r1.Close()
-			r2, err := ins.OpenReader("test2")
-			if err != nil {
-				return logex.Trace(err)
-			}
-			defer r2.Close()
 
-			if err := safeReadExpect(r2, data2); err != nil {
-				return logex.Trace(err)
-			}
-			if err := safeReadExpect(r1, data1); err != nil {
-				return logex.Trace(err)
+			for i := range label {
+				if err := safeReadExpect(rs[i], data[i]); err != nil {
+					return logex.Trace(err)
+				}
 			}
 		}
 		return nil

@@ -71,6 +71,14 @@ func (m *Msgs) PWrite(w io.Writer) (err error) {
 	return nil
 }
 
+func (m *Msgs) PSize() (size int) {
+	size += 2
+	for i := 0; i < len(m.underlay); i++ {
+		size += m.underlay[i].Size()
+	}
+	return size
+}
+
 func (m *Msgs) Msgs() []*message.Ins {
 	return m.underlay
 }
