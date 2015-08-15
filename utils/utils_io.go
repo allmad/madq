@@ -98,6 +98,13 @@ func (r *Reader) Seek(offset int64, whence int) (ret int64, err error) {
 	return r.Offset, nil
 }
 
+func (r *Reader) Close() error {
+	if rc, ok := r.ReaderAt.(io.Closer); ok {
+		return rc.Close()
+	}
+	return nil
+}
+
 type Writer struct {
 	io.WriterAt
 	Offset int64
@@ -119,4 +126,11 @@ func (w *Writer) Seek(offset int64, whence int) (int64, error) {
 		return 0, ErrSeekNotSupport.Trace()
 	}
 	return w.Offset, nil
+}
+
+func (w *Writer) Close() error {
+	if wc, ok := w.WriterAt.(io.Closer); ok {
+		return wc.Close()
+	}
+	return nil
 }

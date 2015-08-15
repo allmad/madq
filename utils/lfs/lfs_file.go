@@ -70,13 +70,13 @@ func OpenFile(lfs *Ins, ino *Inode, name string) (*File, error) {
 }
 
 func (f *File) ReadAt(p []byte, off int64) (int, error) {
-	return 0, nil
+	return f.lfs.readAt(f, p, off)
 }
 
 func (f *File) WriteAt(p []byte, off int64) (int, error) {
-	return 0, nil
+	return f.lfs.writeAt(f, p, off)
 }
 
 func (f *File) Close() error {
-	return nil
+	return f.lfs.closeFile(f)
 }
