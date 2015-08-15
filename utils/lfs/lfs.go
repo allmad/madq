@@ -18,11 +18,6 @@ var (
 	ErrWriteShort = logex.Define("write too short")
 )
 
-type checkPoint struct {
-	blkOff int64
-	data   map[string]int64
-}
-
 // log structured file system implementation
 // provide sequence-write/random-read on large topics
 type Ins struct {
@@ -75,7 +70,7 @@ func New(cfg *Config) (*Ins, error) {
 		cfg: cfg,
 		rfd: rfd,
 		wfd: wfd,
-		cp:  &checkPoint{},
+		cp:  newCheckPoint(),
 		ofs: make(map[string]*File),
 	}
 	go ins.readloop()
@@ -108,7 +103,20 @@ func (i *Ins) OpenWriter(name string) (*utils.Writer, error) {
 }
 
 func (i *Ins) Open(name string) (*File, error) {
-	return OpenFile(i, NewInode(name, i.cfg.blockSize), name)
+	i.ofsGuard.RLock()
+	f := i.ofs[name]
+	i.ofsGuard.RUnlock()
+	if f != nil {
+		return f, nil
+	}
+
+	i.ofsGuard.Lock()
+	f, err := openFile(i, NewInode(name, i.cfg.blockSize), name)
+	if err == nil {
+		i.ofs[name] = f
+	}
+	i.ofsGuard.Unlock()
+	return f, logex.Trace(err)
 }
 
 func (i *Ins) calBlockSize(size int) int {
@@ -136,53 +144,100 @@ func (i *Ins) closeFile(f *File) error {
 	return nil
 }
 
-func (i *Ins) readAt(f *File, p []byte, off int64) (int, error) {
-	return i.rfd.ReadAt(p, off)
+// 1. len(p) <= blk
+// 2. 2*blk > len(p) > blk, continuous
+// 3. 2*blk > len(p) > blk, not continuous
+func (o *Ins) readAt(f *File, p []byte, off int64) (int, error) {
+	blkIdx, rawOff := f.ino.GetRawOff(off)
+	blkOff, blkSize := f.ino.GetBlk(blkIdx)
+	pOff := 0
+	pEnd := 0
+	bytesRead := 0
+
+	// try to find the large continuous blocks
+	for bytesRead < len(p) {
+		pEnd += blkSize
+		if pEnd >= len(p) {
+			pEnd = len(p) // last one
+		} else {
+			lastBlkEnd := blkOff + int64(blkSize)
+			blkIdx++
+			blkOff, blkSize = f.ino.GetBlk(blkIdx)
+			if blkOff == lastBlkEnd { // continuous
+				continue
+			}
+		}
+
+		n, err := o.rfd.ReadAt(p[pOff:pEnd], rawOff)
+		bytesRead += n
+		if err != nil {
+			return bytesRead, logex.Trace(err)
+		}
+
+		rawOff = blkOff
+		pOff = pEnd
+	}
+	return bytesRead, nil
 }
 
-func (o *Ins) fillBuf(p []byte, extendSize int) ([]byte, int) {
+func (o *Ins) fillBuf(p []byte, extendSize int) ([]byte, int, int) {
 	fillsize := 0
-	out := len(p) & (o.cfg.blockSize - 1)
-	if out > 0 {
-		fillsize += o.cfg.blockSize - out
-		p = append(p, o.cfg.emptyBlock[:o.cfg.blockSize-out]...)
+	remain := len(p) & (o.cfg.blockSize - 1)
+	if remain > 0 {
+		fillsize += o.cfg.blockSize - remain
+		p = append(p, o.cfg.emptyBlock[:o.cfg.blockSize-remain]...)
 	}
 	for i := 0; i < extendSize; i++ {
 		fillsize += o.cfg.blockSize
 		p = append(p, o.cfg.emptyBlock...)
 	}
-	return p, fillsize
+	return p, fillsize, remain
 }
 
 func (o *Ins) calInoRawSize(newData []byte, ino *Inode) int {
 	return ino.RawSize(o.calBlockSize(len(newData)))
 }
 
+func (o *Ins) plusBlkOffset(start int64, size int) int64 {
+	return start + int64(size)<<o.cfg.BlockBit
+}
+
 func (o *Ins) writeAt(f *File, p []byte, off int64) (int, error) {
-	inoBlockSize := o.calBlockSize(o.calInoRawSize(p, f.ino))
-	p, fsize := o.fillBuf(p, inoBlockSize)
+	// calculate inode staff
+	inoRawSize := o.calInoRawSize(p, f.ino)
+	inoBlockSize := o.calBlockSize(inoRawSize)
+	// inoRemain := inoRawSize & (o.cfg.blockSize - 1)
+
+	// fill buffer, and alloc it
+	p, fsize, remain := o.fillBuf(p, inoBlockSize)
+	remain = remain
 	blockOff, size := o.allocBlocks(p)
-	currentBlockSize := len(f.ino.Blocks)
-	for i := 0; i < size; i++ {
-		f.ino.Blocks = append(f.ino.Blocks, blockOff+int64(i*o.cfg.blockSize))
-	}
+
+	curBlkSize := f.ino.BlockSize()
+	f.ino.ExtBlks(blockOff, size-inoBlockSize, [][2]int{
+		{size - 1 - inoBlockSize, remain},
+	})
+
+	// start writing ino
 	inoOff := len(p) - inoBlockSize*o.cfg.blockSize
-	inoWriter := bytes.NewBuffer(p[inoOff:inoOff])
-	if err := f.ino.PWrite(inoWriter); err != nil {
+	if err := f.ino.PWrite(bytes.NewBuffer(p[inoOff:inoOff])); err != nil {
 		panic(err)
 	}
-	// logex.Info(p)
 
-	logex.Struct(f.ino)
-	// append ino into p
-	n, err := o.wfd.WriteAt(p, f.ino.Blocks[currentBlockSize])
+	// logex.Info(f.ino)
+
+	// write to fs
+	woff, _ := f.ino.GetBlk(curBlkSize)
+	n, err := o.wfd.WriteAt(p, woff)
 	if err == nil && n != len(p) {
 		err = ErrWriteShort.Trace(n, len(p))
 	}
 	if err != nil {
-		f.ino.Blocks = f.ino.Blocks[:currentBlockSize]
+		// revent ino
+		f.ino.TrunBlk(curBlkSize)
 		return n, logex.Trace(err)
 	}
+	o.cp.SetInoOffset(f.name, woff+int64(inoOff))
 	return n - fsize, nil
 }
 
@@ -192,6 +247,9 @@ func (i *Ins) Pruge() {
 }
 
 func (i *Ins) Close() {
-	i.wfd.Close()
 	i.rfd.Close()
+	if err := i.cp.Save(&utils.Writer{i.wfd, i.wfd.Size()}); err != nil {
+		logex.Error(err)
+	}
+	i.wfd.Close()
 }

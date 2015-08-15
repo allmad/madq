@@ -31,6 +31,10 @@ var (
 	randSource   = rand.New(rand.NewSource(time.Now().Unix()))
 )
 
+func RandInt(n int) int {
+	return randSource.Intn(n)
+}
+
 func RandString(n int) string {
 	b := make([]byte, n)
 	for i := range b {

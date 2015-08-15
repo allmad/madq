@@ -32,6 +32,7 @@ muxque is design to use in IM, follows pub/sub model, to achieve serve millions 
 * [ ] debugTools: detect error in persistence msgs
 * [ ] dashboard: add one :)
 * [ ] sdk: transfer rate controll
+* [ ] svr: file size overflow
 
 ### benchmark
 ---

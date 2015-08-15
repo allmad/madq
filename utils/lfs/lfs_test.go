@@ -16,6 +16,12 @@ func safeReadExpect(r io.Reader, buf []byte) error {
 		return logex.Trace(err)
 	}
 	if !bytes.Equal(b, buf) {
+		if len(b) > 20 {
+			b = b[:20]
+		}
+		if len(buf) > 20 {
+			buf = buf[:20]
+		}
 		logex.Info("readed:", b)
 		logex.Info("expect:", buf)
 		return logex.NewError("read data not expect")
@@ -63,7 +69,6 @@ func newIns() (*Ins, error) {
 }
 
 func TestSingleRW(t *testing.T) {
-	t.Skip()
 	testData := genBlock(9 << 10)
 	ins, err := newIns()
 	if err != nil {
@@ -91,6 +96,53 @@ func TestSingleRW(t *testing.T) {
 	}
 }
 
+func TestNWriteOneRead(t *testing.T) {
+	if err := func() error {
+		ins, err := newIns()
+		if err != nil {
+			return err
+		}
+		defer ins.Close()
+		factor := 5
+
+		w, err := ins.OpenWriter("test1")
+		if err != nil {
+			return err
+		}
+		defer w.Close()
+
+		lengths := make([]int, factor)
+		datas := make([][]byte, factor)
+		expect := make([]byte, 0)
+		total := 0
+		for i := range lengths {
+			l := 1 + utils.RandInt(3)
+			total += l
+			datas[i] = bytes.Repeat([]byte(utils.RandString(1)), l)
+			expect = append(expect, datas[i]...)
+		}
+
+		for _, data := range datas {
+			if err := safeWrite(w, data); err != nil {
+				return err
+			}
+		}
+
+		r, err := ins.OpenReader("test1")
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+		if err := safeReadExpect(r, expect); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		logex.DownLevel(1).Error(err)
+		t.Fatal(err)
+	}
+}
+
 func TestTwoRW(t *testing.T) {
 	if err := func() error {
 		ins, err := newIns()
@@ -98,10 +150,22 @@ func TestTwoRW(t *testing.T) {
 			return logex.Trace(err)
 		}
 		defer ins.Close()
-		label := []string{"test1", "test2", "test3", "test4", "test5"}
-		data := [][]byte{genBlock(2), genBlock(20), genBlock(9), genBlock(15), genBlock(ins.cfg.blockSize + 2)}
+		label := []string{
+			"test1", "test2", "test3", "test4", "test5", "test6", "test7",
+		}
+		data := [][]byte{
+			genBlock(2),
+			genBlock(20),
+			genBlock(9),
+			genBlock(15),
+			genBlock(ins.cfg.blockSize + 2),
+			genBlock(2*ins.cfg.blockSize + 21),
+			genBlock(ins.cfg.blockSize + 1),
+		}
 
-		{ // write two file once
+		testTime := 2
+
+		for jj := 0; jj < testTime; jj++ { // write two file once
 			ws := make([]*utils.Writer, len(label))
 			for i, l := range label {
 				w, err := ins.OpenWriter(l)
@@ -119,7 +183,7 @@ func TestTwoRW(t *testing.T) {
 			}
 		}
 
-		{ // read two file once
+		for jj := 0; jj < testTime; jj++ { // read two file once
 			rs := make([]*utils.Reader, len(label))
 			for i, l := range label {
 				r, err := ins.OpenReader(l)
