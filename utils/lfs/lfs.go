@@ -2,6 +2,7 @@ package lfs
 
 import (
 	"bytes"
+	"io"
 	"sync"
 
 	"github.com/chzyer/muxque/utils"
@@ -10,8 +11,8 @@ import (
 )
 
 const (
-	BlockSize      = 1 << 12
-	SegmentSizeBit = 22
+	BlkBit     = 12
+	SegmentBit = 22
 )
 
 var (
@@ -34,22 +35,22 @@ type Ins struct {
 
 type Config struct {
 	BasePath   string
-	BlockBit   uint
+	BlkBit     uint
 	SegmentBit int
 
-	blockSize  int
+	blkSize    int
 	emptyBlock []byte
 }
 
 func (c *Config) init() error {
-	if c.BlockBit == 0 {
-		c.BlockBit = 12
+	if c.BlkBit == 0 {
+		c.BlkBit = BlkBit
 	}
 	if c.SegmentBit == 0 {
-		c.SegmentBit = 22
+		c.SegmentBit = SegmentBit
 	}
-	c.blockSize = 1 << c.BlockBit
-	c.emptyBlock = make([]byte, c.blockSize)
+	c.blkSize = 1 << c.BlkBit
+	c.emptyBlock = make([]byte, c.blkSize)
 	return nil
 }
 
@@ -111,7 +112,7 @@ func (i *Ins) Open(name string) (*File, error) {
 	}
 
 	i.ofsGuard.Lock()
-	f, err := openFile(i, NewInode(name, i.cfg.blockSize), name)
+	f, err := openFile(i, NewInode(name, i.cfg.BlkBit), name)
 	if err == nil {
 		i.ofs[name] = f
 	}
@@ -120,21 +121,21 @@ func (i *Ins) Open(name string) (*File, error) {
 }
 
 func (i *Ins) calBlockSize(size int) int {
-	blockSize := size >> i.cfg.BlockBit
-	if size&(i.cfg.blockSize-1) != 0 {
-		blockSize++
+	blkSize := size >> i.cfg.BlkBit
+	if size&(i.cfg.blkSize-1) != 0 {
+		blkSize++
 	}
-	return blockSize
+	return blkSize
 }
 
 // return offsets
 func (i *Ins) allocBlocks(p []byte) (startOff int64, size int) {
-	blockSize := i.calBlockSize(len(p))
+	blkSize := i.calBlockSize(len(p))
 	i.cpGuard.Lock()
 	startOff = i.cp.blkOff
-	i.cp.blkOff += int64(blockSize) * int64(i.cfg.blockSize)
+	i.cp.blkOff += int64(blkSize) * int64(i.cfg.blkSize)
 	i.cpGuard.Unlock()
-	return startOff, blockSize
+	return startOff, blkSize
 }
 
 func (i *Ins) closeFile(f *File) error {
@@ -149,29 +150,44 @@ func (i *Ins) closeFile(f *File) error {
 // 3. 2*blk > len(p) > blk, not continuous
 func (o *Ins) readAt(f *File, p []byte, off int64) (int, error) {
 	blkIdx, rawOff := f.ino.GetRawOff(off)
+	if blkIdx < 0 {
+		return 0, io.EOF
+	}
 	blkOff, blkSize := f.ino.GetBlk(blkIdx)
 	pOff := 0
 	pEnd := 0
 	bytesRead := 0
 
+	// println()
 	// try to find the large continuous blocks
 	for bytesRead < len(p) {
 		pEnd += blkSize
+		if pEnd == blkSize { // first time, maybe some offset exists
+			pEnd -= int(rawOff - blkOff)
+		}
 		if pEnd >= len(p) {
 			pEnd = len(p) // last one
 		} else {
 			lastBlkEnd := blkOff + int64(blkSize)
 			blkIdx++
-			blkOff, blkSize = f.ino.GetBlk(blkIdx)
-			if blkOff == lastBlkEnd { // continuous
-				continue
+			if f.ino.HasBlk(blkIdx) {
+				blkOff, blkSize = f.ino.GetBlk(blkIdx)
+				if blkOff == lastBlkEnd { // continuous
+					continue
+				}
+			} else {
+				blkOff, blkSize = -1, -1
 			}
 		}
 
+		// println("readat:", pOff, pEnd, rawOff, pEnd-pOff, len(p), off)
 		n, err := o.rfd.ReadAt(p[pOff:pEnd], rawOff)
 		bytesRead += n
 		if err != nil {
 			return bytesRead, logex.Trace(err)
+		}
+		if blkOff == -1 {
+			return bytesRead, logex.Trace(io.EOF)
 		}
 
 		rawOff = blkOff
@@ -182,13 +198,13 @@ func (o *Ins) readAt(f *File, p []byte, off int64) (int, error) {
 
 func (o *Ins) fillBuf(p []byte, extendSize int) ([]byte, int, int) {
 	fillsize := 0
-	remain := len(p) & (o.cfg.blockSize - 1)
+	remain := len(p) & (o.cfg.blkSize - 1)
 	if remain > 0 {
-		fillsize += o.cfg.blockSize - remain
-		p = append(p, o.cfg.emptyBlock[:o.cfg.blockSize-remain]...)
+		fillsize += o.cfg.blkSize - remain
+		p = append(p, o.cfg.emptyBlock[:o.cfg.blkSize-remain]...)
 	}
 	for i := 0; i < extendSize; i++ {
-		fillsize += o.cfg.blockSize
+		fillsize += o.cfg.blkSize
 		p = append(p, o.cfg.emptyBlock...)
 	}
 	return p, fillsize, remain
@@ -199,7 +215,7 @@ func (o *Ins) calInoRawSize(newData []byte, ino *Inode) int {
 }
 
 func (o *Ins) plusBlkOffset(start int64, size int) int64 {
-	return start + int64(size)<<o.cfg.BlockBit
+	return start + int64(size)<<o.cfg.BlkBit
 }
 
 func (o *Ins) writeAt(f *File, p []byte, off int64) (int, error) {
@@ -219,12 +235,12 @@ func (o *Ins) writeAt(f *File, p []byte, off int64) (int, error) {
 	})
 
 	// start writing ino
-	inoOff := len(p) - inoBlockSize*o.cfg.blockSize
+	inoOff := len(p) - inoBlockSize*o.cfg.blkSize
 	if err := f.ino.PWrite(bytes.NewBuffer(p[inoOff:inoOff])); err != nil {
 		panic(err)
 	}
 
-	// logex.Info(f.ino)
+	//println(f.ino.String())
 
 	// write to fs
 	woff, _ := f.ino.GetBlk(curBlkSize)

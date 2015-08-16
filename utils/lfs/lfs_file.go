@@ -20,14 +20,19 @@ const (
 )
 
 type Inode struct {
-	blockSize int64
-	Name      *rpc.String
-	skipOff   int64 // something deleted
-	blks      []int64
+	blkBit  uint
+	blkSize int64
+	Name    *rpc.String
+	skipOff int64 // something deleted
+	blks    []int64
 }
 
-func NewInode(name string, blockSize int) *Inode {
-	return &Inode{Name: rpc.NewString(name), blockSize: int64(blockSize)}
+func NewInode(name string, blkBit uint) *Inode {
+	return &Inode{
+		Name:    rpc.NewString(name),
+		blkBit:  blkBit,
+		blkSize: 1 << blkBit,
+	}
 }
 
 func (ino *Inode) String() string {
@@ -43,6 +48,10 @@ func (ino *Inode) String() string {
 
 // build a cache?
 func (ino *Inode) GetRawOff(offset int64) (int, int64) {
+	maxSize := int64(len(ino.blks)) << ino.blkBit
+	if offset > maxSize {
+		return -1, -1
+	}
 	var size int64
 	offset -= ino.skipOff
 
@@ -57,11 +66,15 @@ func (ino *Inode) GetRawOff(offset int64) (int, int64) {
 }
 
 func (ino *Inode) getSize(blkInf int64) int {
-	return int(ino.blockSize) - int(blkInf>>InoOffsetBit)
+	return int(ino.blkSize) - int(blkInf>>InoOffsetBit)
 }
 
 func (ino *Inode) getOff(blkInf int64) int64 {
 	return blkInf & InoOffsetMax
+}
+
+func (ino *Inode) HasBlk(i int) bool {
+	return i >= 0 && i < len(ino.blks)
 }
 
 func (ino *Inode) GetBlk(i int) (offset int64, size int) {
@@ -84,7 +97,7 @@ func (ino *Inode) ExtBlks(blockOff int64, size int, remains [][2]int) {
 			out = int64(remains[p][1])
 			p++
 		}
-		block := ino.GenBlock(blockOff+int64(i)*ino.blockSize, out)
+		block := ino.GenBlock(blockOff+int64(i)<<ino.blkBit, out)
 		ino.blks = append(ino.blks, block)
 	}
 }
@@ -98,7 +111,7 @@ func (ino *Inode) GenBlock(offset, out int64) (info int64) {
 		info |= offset & InoOffsetMax
 	}
 	if out > 0 {
-		info |= ((ino.blockSize - (out & InoSizeMax)) << InoOffsetBit)
+		info |= ((ino.blkSize - (out & InoSizeMax)) << InoOffsetBit)
 	}
 	return
 }

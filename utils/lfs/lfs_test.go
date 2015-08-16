@@ -2,6 +2,7 @@ package lfs
 
 import (
 	"bytes"
+	"encoding/hex"
 	"io"
 	"testing"
 
@@ -16,14 +17,15 @@ func safeReadExpect(r io.Reader, buf []byte) error {
 		return logex.Trace(err)
 	}
 	if !bytes.Equal(b, buf) {
-		if len(b) > 20 {
-			b = b[:20]
+		size := 200
+		if len(b) > size {
+			b = b[:size]
 		}
-		if len(buf) > 20 {
-			buf = buf[:20]
+		if len(buf) > size {
+			buf = buf[:size]
 		}
-		logex.Info("readed:", b)
-		logex.Info("expect:", buf)
+		print("readed:\n", hex.Dump(b))
+		print("expect:\n", hex.Dump(buf))
 		return logex.NewError("read data not expect")
 	}
 	return nil
@@ -96,53 +98,6 @@ func TestSingleRW(t *testing.T) {
 	}
 }
 
-func TestNWriteOneRead(t *testing.T) {
-	if err := func() error {
-		ins, err := newIns()
-		if err != nil {
-			return err
-		}
-		defer ins.Close()
-		factor := 5
-
-		w, err := ins.OpenWriter("test1")
-		if err != nil {
-			return err
-		}
-		defer w.Close()
-
-		lengths := make([]int, factor)
-		datas := make([][]byte, factor)
-		expect := make([]byte, 0)
-		total := 0
-		for i := range lengths {
-			l := 1 + utils.RandInt(3)
-			total += l
-			datas[i] = bytes.Repeat([]byte(utils.RandString(1)), l)
-			expect = append(expect, datas[i]...)
-		}
-
-		for _, data := range datas {
-			if err := safeWrite(w, data); err != nil {
-				return err
-			}
-		}
-
-		r, err := ins.OpenReader("test1")
-		if err != nil {
-			return err
-		}
-		defer r.Close()
-		if err := safeReadExpect(r, expect); err != nil {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		logex.DownLevel(1).Error(err)
-		t.Fatal(err)
-	}
-}
-
 func TestTwoRW(t *testing.T) {
 	if err := func() error {
 		ins, err := newIns()
@@ -158,9 +113,9 @@ func TestTwoRW(t *testing.T) {
 			genBlock(20),
 			genBlock(9),
 			genBlock(15),
-			genBlock(ins.cfg.blockSize + 2),
-			genBlock(2*ins.cfg.blockSize + 21),
-			genBlock(ins.cfg.blockSize + 1),
+			genBlock(ins.cfg.blkSize + 2),
+			genBlock(2*ins.cfg.blkSize + 21),
+			genBlock(ins.cfg.blkSize + 1),
 		}
 
 		testTime := 2
@@ -203,6 +158,80 @@ func TestTwoRW(t *testing.T) {
 		return nil
 	}(); err != nil {
 		logex.DownLevel(1).Error(err)
+		t.Fatal(err)
+	}
+}
+
+func TestNWriteMRead(t *testing.T) {
+	if err := func() error {
+		ins, err := newIns()
+		if err != nil {
+			return err
+		}
+		defer ins.Close()
+		factor := 50
+
+		w, err := ins.OpenWriter("test1")
+		if err != nil {
+			return err
+		}
+		defer w.Close()
+
+		lengths := make([]int, factor)
+		datas := make([][]byte, factor)
+		expect := make([]byte, 0)
+		total := 0
+		for i := range lengths {
+			l := 1 + utils.RandInt(200*cfg.blkSize)
+			total += l
+			datas[i] = bytes.Repeat([]byte(utils.RandString(1)), l)
+			expect = append(expect, datas[i]...)
+		}
+
+		for _, data := range datas {
+			if err := safeWrite(w, data); err != nil {
+				return err
+			}
+		}
+
+		r, err := ins.OpenReader("test1")
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+
+		maxSize := 1 << 12
+		pStart := 0
+		pEnd := maxSize
+		for pEnd > pStart {
+			if pEnd > len(expect) {
+				pEnd = len(expect)
+			}
+
+			if err := safeReadExpect(r, expect[pStart:pEnd]); err != nil {
+				return err
+			}
+			pStart = pEnd
+			if pEnd < len(expect) {
+				pEnd += maxSize
+			}
+		}
+
+		// expect eof
+		r.Offset -= 1
+		n, err := r.Read([]byte("padding"))
+		if !logex.Equal(err, io.EOF) || n != 1 {
+			return logex.NewError("expect EOF, got ", n, err)
+		}
+
+		n, err = r.Read([]byte("pad"))
+		if err != io.EOF || n != 0 {
+			return logex.NewError("expect EOF, got ", n)
+		}
+
+		return nil
+	}(); err != nil {
+		logex.Error(err)
 		t.Fatal(err)
 	}
 }
