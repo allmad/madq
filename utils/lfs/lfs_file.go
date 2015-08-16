@@ -78,9 +78,9 @@ func (ino *Inode) HasBlk(i int) bool {
 }
 
 func (ino *Inode) GetBlk(i int) (offset int64, size int) {
-	blockInfo := ino.blks[i]
-	offset = ino.getOff(blockInfo)
-	size = ino.getSize(blockInfo)
+	blkInfo := ino.blks[i]
+	offset = ino.getOff(blkInfo)
+	size = ino.getSize(blkInfo)
 	return
 }
 
@@ -88,7 +88,7 @@ func (ino *Inode) TrunBlk(i int) {
 	ino.blks = ino.blks[:i]
 }
 
-func (ino *Inode) ExtBlks(blockOff int64, size int, remains [][2]int) {
+func (ino *Inode) ExtBlks(blkOff int64, size int, remains [][2]int) {
 	var out int64 = 0
 	p := 0
 	for i := 0; i < size; i++ {
@@ -97,16 +97,16 @@ func (ino *Inode) ExtBlks(blockOff int64, size int, remains [][2]int) {
 			out = int64(remains[p][1])
 			p++
 		}
-		block := ino.GenBlock(blockOff+int64(i)<<ino.blkBit, out)
-		ino.blks = append(ino.blks, block)
+		blk := ino.GenBlk(blkOff+int64(i)<<ino.blkBit, out)
+		ino.blks = append(ino.blks, blk)
 	}
 }
 
-func (ino *Inode) BlockSize() int {
+func (ino *Inode) BlkSize() int {
 	return len(ino.blks)
 }
 
-func (ino *Inode) GenBlock(offset, out int64) (info int64) {
+func (ino *Inode) GenBlk(offset, out int64) (info int64) {
 	if offset > 0 {
 		info |= offset & InoOffsetMax
 	}
@@ -116,12 +116,12 @@ func (ino *Inode) GenBlock(offset, out int64) (info int64) {
 	return
 }
 
-func (ino *Inode) calBlockOffSize(size int) int {
+func (ino *Inode) calBlkOffSize(size int) int {
 	return size * 8
 }
 
-func (ino *Inode) RawSize(newBlockSize int) int {
-	return ino.calBlockOffSize(newBlockSize + len(ino.blks))
+func (ino *Inode) RawSize(newBlkSize int) int {
+	return ino.calBlkOffSize(newBlkSize + len(ino.blks))
 }
 
 func (ino *Inode) PSize() int {

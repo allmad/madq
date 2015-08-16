@@ -38,8 +38,8 @@ type Config struct {
 	BlkBit     uint
 	SegmentBit int
 
-	blkSize    int
-	emptyBlock []byte
+	blkSize  int
+	emptyBlk []byte
 }
 
 func (c *Config) init() error {
@@ -50,7 +50,7 @@ func (c *Config) init() error {
 		c.SegmentBit = SegmentBit
 	}
 	c.blkSize = 1 << c.BlkBit
-	c.emptyBlock = make([]byte, c.blkSize)
+	c.emptyBlk = make([]byte, c.blkSize)
 	return nil
 }
 
@@ -120,7 +120,7 @@ func (i *Ins) Open(name string) (*File, error) {
 	return f, logex.Trace(err)
 }
 
-func (i *Ins) calBlockSize(size int) int {
+func (i *Ins) calBlkSize(size int) int {
 	blkSize := size >> i.cfg.BlkBit
 	if size&(i.cfg.blkSize-1) != 0 {
 		blkSize++
@@ -129,8 +129,8 @@ func (i *Ins) calBlockSize(size int) int {
 }
 
 // return offsets
-func (i *Ins) allocBlocks(p []byte) (startOff int64, size int) {
-	blkSize := i.calBlockSize(len(p))
+func (i *Ins) allocBlks(p []byte) (startOff int64, size int) {
+	blkSize := i.calBlkSize(len(p))
 	i.cpGuard.Lock()
 	startOff = i.cp.blkOff
 	i.cp.blkOff += int64(blkSize) * int64(i.cfg.blkSize)
@@ -201,17 +201,17 @@ func (o *Ins) fillBuf(p []byte, extendSize int) ([]byte, int, int) {
 	remain := len(p) & (o.cfg.blkSize - 1)
 	if remain > 0 {
 		fillsize += o.cfg.blkSize - remain
-		p = append(p, o.cfg.emptyBlock[:o.cfg.blkSize-remain]...)
+		p = append(p, o.cfg.emptyBlk[:o.cfg.blkSize-remain]...)
 	}
 	for i := 0; i < extendSize; i++ {
 		fillsize += o.cfg.blkSize
-		p = append(p, o.cfg.emptyBlock...)
+		p = append(p, o.cfg.emptyBlk...)
 	}
 	return p, fillsize, remain
 }
 
 func (o *Ins) calInoRawSize(newData []byte, ino *Inode) int {
-	return ino.RawSize(o.calBlockSize(len(newData)))
+	return ino.RawSize(o.calBlkSize(len(newData)))
 }
 
 func (o *Ins) plusBlkOffset(start int64, size int) int64 {
@@ -221,21 +221,20 @@ func (o *Ins) plusBlkOffset(start int64, size int) int64 {
 func (o *Ins) writeAt(f *File, p []byte, off int64) (int, error) {
 	// calculate inode staff
 	inoRawSize := o.calInoRawSize(p, f.ino)
-	inoBlockSize := o.calBlockSize(inoRawSize)
-	// inoRemain := inoRawSize & (o.cfg.blockSize - 1)
+	inoBlkSize := o.calBlkSize(inoRawSize)
 
 	// fill buffer, and alloc it
-	p, fsize, remain := o.fillBuf(p, inoBlockSize)
+	p, fsize, remain := o.fillBuf(p, inoBlkSize)
 	remain = remain
-	blockOff, size := o.allocBlocks(p)
+	blkOff, size := o.allocBlks(p)
 
-	curBlkSize := f.ino.BlockSize()
-	f.ino.ExtBlks(blockOff, size-inoBlockSize, [][2]int{
-		{size - 1 - inoBlockSize, remain},
+	curBlkSize := f.ino.BlkSize()
+	f.ino.ExtBlks(blkOff, size-inoBlkSize, [][2]int{
+		{size - 1 - inoBlkSize, remain},
 	})
 
 	// start writing ino
-	inoOff := len(p) - inoBlockSize*o.cfg.blkSize
+	inoOff := len(p) - inoBlkSize*o.cfg.blkSize
 	if err := f.ino.PWrite(bytes.NewBuffer(p[inoOff:inoOff])); err != nil {
 		panic(err)
 	}
@@ -263,6 +262,7 @@ func (i *Ins) Pruge() {
 }
 
 func (i *Ins) Close() {
+	logex.Info(i.cp)
 	i.rfd.Close()
 	if err := i.cp.Save(&utils.Writer{i.wfd, i.wfd.Size()}); err != nil {
 		logex.Error(err)

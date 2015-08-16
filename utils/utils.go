@@ -4,6 +4,9 @@ import (
 	"math"
 	"os"
 	"sync/atomic"
+	"testing"
+
+	"gopkg.in/logex.v1"
 )
 
 var (
@@ -32,3 +35,10 @@ const (
 	InitState State = iota
 	CloseState
 )
+
+func TDefer(t *testing.T, err *error) {
+	if *err != nil {
+		logex.DownLevel(1).Error(*err)
+		t.Fatal(*err)
+	}
+}
