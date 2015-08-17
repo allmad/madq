@@ -69,5 +69,5 @@ func (i *String) PWrite(w io.Writer) error {
 }
 
 func (i *String) PSize() int {
-	return 2 + len(i.underlay)
+	return 1 + 2 + len(i.underlay) // magic + header + data
 }

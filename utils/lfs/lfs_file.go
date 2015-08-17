@@ -27,6 +27,17 @@ type Inode struct {
 	blks    []int64
 }
 
+func ReadInode(r io.Reader, blkBit uint) (*Inode, error) {
+	ino := &Inode{
+		blkBit:  blkBit,
+		blkSize: 1 << blkBit,
+	}
+	if err := ino.PRead(r); err != nil {
+		return nil, logex.Trace(err)
+	}
+	return ino, nil
+}
+
 func NewInode(name string, blkBit uint) *Inode {
 	return &Inode{
 		Name:    rpc.NewString(name),
@@ -124,26 +135,11 @@ func (ino *Inode) RawSize(newBlkSize int) int {
 	return ino.calBlkOffSize(newBlkSize + len(ino.blks))
 }
 
-func (ino *Inode) PSize() int {
-	return 2 + // block length
-		8*len(ino.blks) + // block size
-		ino.Name.PSize() + // name
-		8 // skipOff
-}
-
 func (ino *Inode) PRead(r io.Reader) (err error) {
-	ino.Name, err = rpc.ReadString(r)
-	if err != nil {
-		return logex.Trace(err)
-	}
-
-	ps, err := rpc.ReadInt64(r)
-	if err != nil {
-		return logex.Trace(err)
-	}
-	ino.skipOff = ps.Int64()
-
-	var length uint16
+	var (
+		length uint16
+		ps     *rpc.Int64
+	)
 	if err := binary.Read(r, binary.LittleEndian, &length); err != nil {
 		return logex.Trace(err)
 	}
@@ -155,27 +151,43 @@ func (ino *Inode) PRead(r io.Reader) (err error) {
 		}
 		ino.blks[i] = ps.Int64()
 	}
+
+	ino.Name, err = rpc.ReadString(r)
+	if err != nil {
+		return logex.Trace(err)
+	}
+
+	ps, err = rpc.ReadInt64(r)
+	if err != nil {
+		return logex.Trace(err)
+	}
+	ino.skipOff = ps.Int64()
 	return nil
 }
 
 func (ino *Inode) PWrite(w io.Writer) (err error) {
-	if err = rpc.WriteItems(w, []rpc.Item{
-		ino.Name,
-		rpc.NewInt64(uint64(ino.skipOff)),
-	}); err != nil {
-		return logex.Trace(err)
-	}
 	if err = binary.Write(w, binary.LittleEndian, uint16(len(ino.blks))); err != nil {
 		return logex.Trace(err)
 	}
-	blks := make([]rpc.Item, len(ino.blks))
+	blks := make([]rpc.Item, len(ino.blks)+2)
 	for i := 0; i < len(ino.blks); i++ {
 		blks[i] = rpc.NewInt64(uint64(ino.blks[i]))
 	}
+	blks[len(ino.blks)] = ino.Name
+	blks[len(ino.blks)+1] = rpc.NewInt64(uint64(ino.skipOff))
+
 	if err = rpc.WriteItems(w, blks); err != nil {
 		return logex.Trace(err)
 	}
 	return nil
+}
+
+func (ino *Inode) PSize() int {
+	println(ino.Name.PSize(), 9)
+	return 0 +
+		ino.Name.PSize() + // name
+		1 + 8 + // magic + skipOff
+		2 + (1+8)*len(ino.blks) // magic + length(uint16) +
 }
 
 type File struct {

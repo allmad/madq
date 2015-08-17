@@ -262,7 +262,7 @@ func (i *Ins) Pruge() {
 }
 
 func (i *Ins) Close() {
-	logex.Info(i.cp)
+	// logex.Info(i.cp)
 	i.rfd.Close()
 	if err := i.cp.Save(&utils.Writer{i.wfd, i.wfd.Size()}); err != nil {
 		logex.Error(err)
