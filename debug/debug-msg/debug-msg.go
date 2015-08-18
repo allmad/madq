@@ -50,15 +50,15 @@ func hex(b []byte) {
 func main() {
 	c := NewConfig()
 	if c.MsgBin != "" {
-		msgBin(utils.ByteStr(c.MsgBin))
+		msgBin(utils.MustByteStr(c.MsgBin))
 	}
 	if c.MsgId != "" {
-		msgId(utils.ByteStr(c.MsgId))
+		msgId(utils.MustByteStr(c.MsgId))
 	}
 	if c.MsgOffset > 0 {
 		msgOffset(c.MsgOffset)
 	}
 	if c.Hex != "" {
-		hex(utils.ByteStr(c.Hex))
+		hex(utils.MustByteStr(c.Hex))
 	}
 }

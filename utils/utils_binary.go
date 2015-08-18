@@ -1,28 +1,29 @@
 package utils
 
 import (
-	"encoding/binary"
-	"io"
 	"math/rand"
 	"strconv"
 	"strings"
 	"time"
-
-	"gopkg.in/logex.v1"
 )
 
-func ByteStr(s string) []byte {
+func MustByteStr(s string) []byte {
+	msg, _ := ByteStr(s)
+	return msg
+}
+
+func ByteStr(s string) ([]byte, error) {
 	msgStr := strings.Trim(s, "[]\n\r")
 	msgByteStr := strings.Split(msgStr, " ")
 	msgBytes := make([]byte, len(msgByteStr))
 	for i := range msgBytes {
 		b, err := strconv.Atoi(msgByteStr[i])
 		if err != nil {
-			logex.Fatal(err)
+			return msgBytes[:i], err
 		}
 		msgBytes[i] = byte(b)
 	}
-	return msgBytes
+	return msgBytes, nil
 }
 
 var (
@@ -45,14 +46,4 @@ func RandString(n int) string {
 
 func PathEncode(p string) string {
 	return pathReplacer.Replace(p)
-}
-
-func BinaryWriteMulti(w io.Writer, objs []interface{}) (err error) {
-	for i := 0; i < len(objs); i++ {
-		err = binary.Write(w, binary.LittleEndian, objs[i])
-		if err != nil {
-			return logex.Trace(err, i)
-		}
-	}
-	return nil
 }
