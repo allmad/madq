@@ -38,6 +38,10 @@ var (
 
 type Header [SizeMsgHeader]byte
 
+var (
+	MagicBytes = []byte{MagicByte, MagicByteV2}
+)
+
 const (
 	MagicByte, MagicByteV2 byte = 0x9a, 0x80
 
@@ -65,11 +69,7 @@ const (
 	MinMsgLength   = SizeMsgId + SizeMsgCrc + SizeMsgVer
 )
 
-var (
-	MagicBytes = []byte{MagicByte, MagicByteV2}
-)
-
-// in binary(magic always is 0x9a):
+// in binary(magic always is 0x9a,0x80):
 // +----------------+------------------------------+
 // |     header     |             body             |
 // +-------+--------+-------+-----+---------+------+
@@ -88,20 +88,7 @@ type Ins struct {
 	underlay []byte
 }
 
-type magicReader struct {
-	eof bool
-}
-
-func (m *magicReader) Read(b []byte) (int, error) {
-	if m.eof {
-		return 0, io.EOF
-	}
-	n := copy(b, MagicBytes)
-	m.eof = true
-	return n, nil
-}
-
-func NewByBin(b []byte) *Ins {
+func New(b []byte) *Ins {
 	return NewByData(NewData(b))
 }
 
@@ -190,7 +177,7 @@ func read(reuseBuf *Header, r io.Reader) (int, *Ins, error) {
 	}
 
 	copy(content, header)
-	m, err := New(content)
+	m, err := Decode(content)
 	if err != nil {
 		return nRead, nil, logex.Trace(err)
 	}
@@ -216,7 +203,7 @@ func ReadHeader(buf []byte, lengthRef *uint32) (err error) {
 	return nil
 }
 
-func New(data []byte) (m *Ins, err error) {
+func Decode(data []byte) (m *Ins, err error) {
 	if len(data) < OffsetMsgData {
 		return nil, ErrInvalidHeader.Format("short length")
 	}

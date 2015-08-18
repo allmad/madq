@@ -88,7 +88,7 @@ func BenchmarkTopicPut(b *testing.B) {
 	b.ResetTimer()
 	buffer := []*message.Ins{}
 	for i := 0; i < b.N; i++ {
-		m, _ := message.New(msg.Bytes())
+		m, _ := message.Decode(msg.Bytes())
 		b.SetBytes(int64(m.Length))
 		buffer = append(buffer, m)
 		if len(buffer) >= MaxPutBenchSize {

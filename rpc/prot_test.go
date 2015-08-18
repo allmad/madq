@@ -32,7 +32,7 @@ func TestProtStruct(t *testing.T) {
 }
 
 func TestProtMsgs(t *testing.T) {
-	msgs := []*message.Ins{message.NewByBin([]byte("hello"))}
+	msgs := []*message.Ins{message.New([]byte("hello"))}
 	obj := NewMsgs(msgs)
 	buf := bytes.NewBuffer(nil)
 	if err := WriteItem(buf, obj); err != nil {

@@ -77,7 +77,7 @@ func BenchmarkReadDisk(b *testing.B) {
 func TestMessage(t *testing.T) {
 	m := NewByData(NewData([]byte("hello")))
 	{
-		m2, err := New(m.underlay)
+		m2, err := Decode(m.underlay)
 		if err != nil {
 			t.Fatal(err)
 		}
