@@ -88,7 +88,7 @@ func TestMessage(t *testing.T) {
 	}
 	var header Header
 	{
-		m3, err := Read(&header, utils.NewReaderBlock(m.underlay), RF_DEFAULT)
+		m3, err := Read(&header, utils.NewBufioBlk(m.underlay), RF_DEFAULT)
 		if err != nil {
 			logex.Error(err)
 			t.Fatal(err)
@@ -102,7 +102,7 @@ func TestMessage(t *testing.T) {
 	{ // deal with `hello`{message}
 		prefix := []byte("hello")
 		m.SetMsgId(uint64(len(prefix)))
-		buf := utils.NewReaderBlock(append(prefix, m.underlay...))
+		buf := utils.NewBufioBlk(append(prefix, m.underlay...))
 		m4, err := Read(&header, buf, RF_RESEEK_ON_FAULT)
 		if err != nil {
 			logex.Error(err)
@@ -122,7 +122,7 @@ func TestMessage(t *testing.T) {
 
 		m.SetMsgId(uint64(len(bin)))
 		bin = append(bin, m.underlay...)
-		buf := utils.NewReaderBlock(bin)
+		buf := utils.NewBufioBlk(bin)
 		m5, err := Read(&header, buf, RF_RESEEK_ON_FAULT)
 		if err != nil {
 			logex.Error(err)

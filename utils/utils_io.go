@@ -17,6 +17,10 @@ type Bufio struct {
 	underlay *Reader
 }
 
+func NewBufioBlk(b []byte) *Bufio {
+	return NewBufio(&Reader{NewBlock(b), 0})
+}
+
 func NewBufio(r *Reader) *Bufio {
 	b := Bufio{
 		Reader:   bufio.NewReader(r),
@@ -25,21 +29,10 @@ func NewBufio(r *Reader) *Bufio {
 	return &b
 }
 
-func (b *Bufio) UnreadBytes(n int) (err error) {
-	offset := b.Offset(-1)
-	for i := 0; i < n; i++ {
-		if err = b.Reader.UnreadByte(); err != nil {
-			b.Offset(offset)
-			return err
-		}
-	}
-	return nil
-}
-
 func (b *Bufio) Offset(o int64) int64 {
 	oldOff := b.underlay.Offset - int64(b.Buffered())
 	if o >= 0 {
-		b.underlay.Offset = o
+		b.underlay.Seek(o, 0)
 		b.Reader.Reset(b.underlay)
 	}
 	return oldOff
@@ -52,13 +45,10 @@ type Block struct {
 }
 
 func NewBlock(buf []byte) *Block {
-	bb := bytes.NewReader(buf)
-	_ = bb
-	b := Block{
-		Buf: buf,
+	return &Block{
+		Buf:    buf,
+		Reader: bytes.NewReader(buf),
 	}
-	b.Reader = bb
-	return &b
 }
 
 func (r *Block) Read(b []byte) (int, error) {
@@ -76,8 +66,8 @@ type Reader struct {
 	Offset int64
 }
 
-func NewReaderBlock(b []byte) *Bufio {
-	return NewBufio(&Reader{NewBlock(b), 0})
+func NewReader(r io.ReaderAt, off int64) *Reader {
+	return &Reader{r, off}
 }
 
 func (r *Reader) Read(val []byte) (n int, err error) {
@@ -108,6 +98,10 @@ func (r *Reader) Close() error {
 type Writer struct {
 	io.WriterAt
 	Offset int64
+}
+
+func NewWriter(w io.WriterAt, off int64) *Writer {
+	return &Writer{w, off}
 }
 
 func (w *Writer) Write(buf []byte) (n int, err error) {
