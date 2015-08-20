@@ -15,6 +15,8 @@ const (
 	DefaultChunkBit = 22
 )
 
+var ErrInvalidOffset = logex.Define("invalid offset")
+
 type fileCtx struct {
 	*os.File
 	ref int32
@@ -72,12 +74,17 @@ func (f *File) getIdx(off int64) int64 {
 }
 
 func (f *File) getFile(offset int64) (*fileCtx, error) {
+	if offset < 0 {
+		return nil, ErrInvalidOffset
+	}
 	idx := offset >> f.chunkBit
 	name := strconv.FormatInt(idx, 36)
 	cacheIdx := idx % CacheSize
 
+	// make sure it does not panic
 	f.RLock()
-	fctx := f.cache[cacheIdx]
+	var fctx *fileCtx
+	fctx = f.cache[cacheIdx]
 	if fctx != nil && fctx.idx == idx {
 		fctx.Acquire()
 		f.RUnlock()
@@ -110,7 +117,7 @@ func (f *File) WriteAt(buf []byte, at int64) (n int, err error) {
 	}
 	defer fctx.Release()
 
-	chunkOffset := at - ((at >> f.chunkBit) << f.chunkBit)
+	chunkOffset := at & int64(f.chunkSize-1)
 	sizeLeft := int64(f.chunkSize) - chunkOffset
 
 	if sizeLeft >= int64(len(buf)) {
@@ -134,7 +141,7 @@ func (f *File) ReadAt(buf []byte, at int64) (n int, err error) {
 	}
 	defer fctx.Release()
 
-	chunkOffset := at - ((at >> f.chunkBit) << f.chunkBit)
+	chunkOffset := at & int64(f.chunkSize-1)
 	sizeLeft := int64(f.chunkSize) - chunkOffset
 
 	n, err = fctx.ReadAt(buf, chunkOffset)
@@ -146,6 +153,9 @@ func (f *File) ReadAt(buf []byte, at int64) (n int, err error) {
 	}
 	if err != nil {
 		return n, logex.Trace(err, chunkOffset)
+	}
+	if n == 0 {
+		panic("n == 0 is not allow")
 	}
 
 	nNew, err := f.ReadAt(buf[n:], at+int64(n))
@@ -173,12 +183,11 @@ func (f *File) Size() int64 {
 		return 0
 	}
 	names, err := fdir.Readdirnames(-1)
+	fdir.Close()
 	if err != nil {
-		fdir.Close()
 		logex.Error(err)
 		return 0
 	}
-	fdir.Close()
 	if len(names) == 0 {
 		return 0
 	}
@@ -187,7 +196,7 @@ func (f *File) Size() int64 {
 	for i := 0; i < len(names); i++ {
 		chunkIdx, err := strconv.ParseInt(names[i], 36, 64)
 		if err != nil {
-			logex.Error(err)
+			logex.Errorf("ignore the unexpected file name: %v, %v", names[i], err)
 			continue
 		}
 		if chunkIdx > idx {

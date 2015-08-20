@@ -6,8 +6,13 @@ set -e
 output_null=""
 output_file=".cover.out"
 
+list_cmd="go list ./..."
+if [[ "$2" != "" ]]; then
+	list_cmd="echo '$2'"
+fi
+
 mkdir -p .cover
-go list ./... | xargs -I% bash -c 'name="%"; go test % --coverprofile=.cover/${name//\//_}'$output_null
+eval "$list_cmd" | xargs -I% bash -c 'name="%"; go test % --coverprofile=.cover/${name//\//_}'$output_null
 echo "mode: set" > $output_file
 cat .cover/* | grep -v mode >> $output_file
 rm -r .cover
