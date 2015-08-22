@@ -36,17 +36,20 @@ func newCheckPoint(blkBit uint, r *bitmap.File) *checkPoint {
 	cp.blkBit = blkBit
 	cp.blkSize = 1 << blkBit
 	cp.blk = make([]byte, cp.blkSize)
-	if err := cp.Resore(r); err != nil {
+	if err := cp.Restore(r); err != nil {
 		cp.Data = make(map[string]int64)
 	}
 	return cp
 }
 
-func (c *checkPoint) Resore(r *bitmap.File) (err error) {
+func (c *checkPoint) Restore(r *bitmap.File) (err error) {
 	size := r.Size() // make sure is blksize-round
 	off := size - (size & int64(c.blkSize-1))
 	buf := make([]byte, 2)
 	for {
+		if off == 0 {
+			break
+		}
 		off -= int64(c.blkSize)
 		_, err = r.ReadAt(buf, off)
 		if err != nil {
@@ -62,11 +65,50 @@ func (c *checkPoint) Resore(r *bitmap.File) (err error) {
 			return
 		}
 
+		off = bio.Offset(-1)
 		break
 	}
 
-	// TODO: try to restore ino which not in checkpoint
+	// move off to next blk
+	off = c.calFloor(off)
+
+	if c.Data == nil {
+		c.Data = make(map[string]int64)
+	}
+	updated := false
+	if off < size {
+		logex.Info("trying to resore ino into checkpoint")
+	}
+	bio := utils.NewBufio(utils.NewReader(r, off))
+	for off < size {
+		bio.Offset(off)
+		ino, err := ReadInode(bio, c.blkBit)
+		if err != nil {
+			if logex.Equal(err, io.EOF) {
+				break
+			}
+			off += int64(c.blkSize)
+			continue
+		}
+
+		updated = true
+		c.Data[ino.Name.String()] = off
+		off = c.calFloor(bio.Offset(-1))
+	}
+
+	if updated {
+		err = logex.Trace(c.Save(utils.NewWriter(r, r.Size())))
+	}
 	return
+}
+
+func (c *checkPoint) calFloor(off int64) int64 {
+	remain := off & int64(c.blkSize-1)
+	off -= remain
+	if remain != 0 {
+		off += int64(c.blkSize)
+	}
+	return off
 }
 
 func (c *checkPoint) Save(w io.Writer) error {

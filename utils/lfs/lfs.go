@@ -54,6 +54,7 @@ func (c *Config) init() error {
 	return nil
 }
 
+// TODO: lock the directory
 func New(cfg *Config) (*Ins, error) {
 	if err := cfg.init(); err != nil {
 		return nil, logex.Trace(err)
@@ -275,10 +276,14 @@ func (i *Ins) Pruge() {
 	i.wfd.Delete()
 }
 
+func (i *Ins) FlushCheckPoint() error {
+	return logex.Trace(i.cp.Save(&utils.Writer{i.wfd, i.wfd.Size()}))
+}
+
 func (i *Ins) Close() {
 	// logex.Info(i.cp)
 	i.rfd.Close()
-	if err := i.cp.Save(&utils.Writer{i.wfd, i.wfd.Size()}); err != nil {
+	if err := i.FlushCheckPoint(); err != nil {
 		logex.Error(err)
 	}
 	i.wfd.Close()

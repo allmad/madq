@@ -296,3 +296,39 @@ func TestLFSPersist(t *testing.T) {
 		err = logex.NewError("result not expect")
 	}
 }
+
+func TestLFSCheckPointRepair(t *testing.T) {
+	var err error
+	defer utils.TDefer(t, &err)
+
+	lfs, err := newIns()
+	if err != nil {
+		return
+	}
+
+	w, err := lfs.OpenWriter("/fff")
+	if err != nil {
+		return
+	}
+	w.Write([]byte("hello"))
+	w.Close()
+
+	lfs, err = New(cfg)
+	if err != nil {
+		return
+	}
+
+	r, err := lfs.OpenReader("/fff")
+	if err != nil {
+		return
+	}
+	buf := make([]byte, 5)
+	_, err = r.Read(buf)
+	if err != nil {
+		return
+	}
+	if !bytes.Equal(buf, []byte("hello")) {
+		err = logex.NewError("result not expected")
+		return
+	}
+}

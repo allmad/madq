@@ -31,7 +31,7 @@ func NewBufio(r *Reader) *Bufio {
 
 func (b *Bufio) Offset(o int64) int64 {
 	oldOff := b.underlay.Offset - int64(b.Buffered())
-	if o >= 0 {
+	if o >= 0 && oldOff != o {
 		b.underlay.Seek(o, 0)
 		b.Reader.Reset(b.underlay)
 	}

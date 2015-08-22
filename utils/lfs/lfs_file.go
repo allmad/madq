@@ -1,6 +1,7 @@
 package lfs
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -17,6 +18,13 @@ const (
 	InoOffsetMax = (1 << InoOffsetBit) - 1
 	InoSizeBit   = 64 - InoOffsetBit
 	InoSizeMax   = (1 << InoSizeBit) - 1
+
+	InoMagic, InoMagicV2 = 0x9c, 0x80
+)
+
+var (
+	InoMagicBytes      = []byte{InoMagic, InoMagicV2}
+	ErrInoInvalidMagic = logex.Define("not a valid ino: magicByte not match")
 )
 
 type Inode struct {
@@ -140,7 +148,15 @@ func (ino *Inode) PRead(r io.Reader) (err error) {
 		length uint16
 		ps     *rpc.Int64
 	)
-	if err := binary.Read(r, binary.LittleEndian, &length); err != nil {
+	buf := make([]byte, len(InoMagicBytes))
+	_, err = io.ReadFull(r, buf)
+	if err != nil {
+		return logex.Trace(err)
+	}
+	if !bytes.Equal(buf, InoMagicBytes) {
+		return ErrInoInvalidMagic.Trace(buf)
+	}
+	if err = binary.Read(r, binary.LittleEndian, &length); err != nil {
 		return logex.Trace(err)
 	}
 	ino.blks = make([]int64, int(length))
@@ -166,6 +182,9 @@ func (ino *Inode) PRead(r io.Reader) (err error) {
 }
 
 func (ino *Inode) PWrite(w io.Writer) (err error) {
+	if _, err := w.Write(InoMagicBytes); err != nil {
+		return logex.Trace(err)
+	}
 	if err = binary.Write(w, binary.LittleEndian, uint16(len(ino.blks))); err != nil {
 		return logex.Trace(err)
 	}
@@ -183,7 +202,7 @@ func (ino *Inode) PWrite(w io.Writer) (err error) {
 }
 
 func (ino *Inode) PSize() int {
-	return 0 +
+	return 2 + // ino magic byte
 		ino.Name.PSize() + // name
 		1 + 8 + // magic + skipOff
 		2 + (1+8)*len(ino.blks) // magic + length(uint16) +
