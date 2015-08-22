@@ -8,6 +8,9 @@ test: install
 cover:
 	./scripts/goverall.sh
 
+find-todo:
+	@find . -name '*.go' | xargs grep -n TODO
+
 bench-message:
 	go test -v -benchtime $(TIME) -benchmem -bench=. -run=Nothing github.com/chzyer/muxque/rpc/message | scripts/addops.awk
 

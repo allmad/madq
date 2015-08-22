@@ -183,7 +183,6 @@ func (ino *Inode) PWrite(w io.Writer) (err error) {
 }
 
 func (ino *Inode) PSize() int {
-	println(ino.Name.PSize(), 9)
 	return 0 +
 		ino.Name.PSize() + // name
 		1 + 8 + // magic + skipOff
@@ -211,6 +210,10 @@ func (f *File) ReadAt(p []byte, off int64) (int, error) {
 
 func (f *File) WriteAt(p []byte, off int64) (int, error) {
 	return f.lfs.writeAt(f, p, off)
+}
+
+func (f *File) Size() int64 {
+	return 0
 }
 
 func (f *File) Close() error {

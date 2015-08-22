@@ -6,31 +6,85 @@ import (
 	"io"
 	"sync"
 
+	"github.com/chzyer/muxque/utils"
+	"github.com/chzyer/muxque/utils/bitmap"
+
 	"gopkg.in/logex.v1"
 )
 
+const (
+	MagicByte, MagicByteV2 byte = 0x9b, 0x90
+)
+
+var (
+	MagicBytes = []byte{MagicByte, MagicByteV2}
+)
+
 type checkPoint struct {
-	blkOff int64
-	Data   map[string]int64
+	Data map[string]int64
+
+	blkOff  int64
+	blkBit  uint
+	blkSize int
+	blk     []byte
+
 	sync.Mutex
 }
 
-func newCheckPoint() *checkPoint {
-	return &checkPoint{
-		Data: make(map[string]int64),
+func newCheckPoint(blkBit uint, r *bitmap.File) *checkPoint {
+	cp := new(checkPoint)
+	cp.blkBit = blkBit
+	cp.blkSize = 1 << blkBit
+	cp.blk = make([]byte, cp.blkSize)
+	if err := cp.Resore(r); err != nil {
+		cp.Data = make(map[string]int64)
 	}
+	return cp
 }
 
-func (c *checkPoint) PRead() {
+func (c *checkPoint) Resore(r *bitmap.File) (err error) {
+	size := r.Size() // make sure is blksize-round
+	off := size - (size & int64(c.blkSize-1))
+	buf := make([]byte, 2)
+	for {
+		off -= int64(c.blkSize)
+		_, err = r.ReadAt(buf, off)
+		if err != nil {
+			return
+		}
+		if !bytes.Equal(buf, MagicBytes) {
+			continue
+		}
 
+		bio := utils.NewBufio(utils.NewReader(r, off+2))
+		if err = gob.NewDecoder(bio).Decode(&c.Data); err != nil {
+			logex.Error(err)
+			return
+		}
+
+		break
+	}
+
+	// TODO: try to restore ino which not in checkpoint
+	return
 }
 
 func (c *checkPoint) Save(w io.Writer) error {
 	buf := bytes.NewBuffer(make([]byte, 0, 512))
+	buf.Write(MagicBytes)
 	if err := gob.NewEncoder(buf).Encode(c.Data); err != nil {
 		panic(err)
 	}
+	padding := c.blkSize - (buf.Len() & (c.blkSize - 1))
+	buf.Write(c.blk[:padding])
+	oldBlkOff := c.blkOff
+	c.blkOff += int64(buf.Len())
+
 	_, err := buf.WriteTo(w)
+	if err != nil {
+		c.blkOff = oldBlkOff
+		err = logex.Trace(err)
+	}
 	return logex.Trace(err)
 }
 
@@ -38,4 +92,15 @@ func (c *checkPoint) SetInoOffset(name string, offset int64) {
 	c.Lock()
 	c.Data[name] = offset
 	c.Unlock()
+}
+
+// return -1 if ino not found
+func (c *checkPoint) GetInoOffset(name string) int64 {
+	c.Lock()
+	off, ok := c.Data[name]
+	c.Unlock()
+	if !ok {
+		return -1
+	}
+	return off
 }

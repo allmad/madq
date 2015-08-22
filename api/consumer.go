@@ -50,10 +50,7 @@ func (c *Consumer) replyLoop() {
 		}
 		if atomic.AddInt64(&c.Remain, -int64(len(reply.Msgs))) == 0 {
 			atomic.StoreInt64(&c.Offset, reply.Offset)
-			select {
-			case c.kickChan <- struct{}{}:
-			default:
-			}
+			c.kickReqLoop()
 		}
 		c.ReplyChan <- reply
 	}
@@ -71,19 +68,20 @@ func (c *Consumer) reqLoop() {
 		if err := c.api.Get(c.Topic, atomic.LoadInt64(&c.Offset), c.Size); err != nil {
 			logex.Error(err)
 			time.Sleep(time.Second)
-			select {
-			case <-c.kickChan:
-			default:
-			}
+			c.kickReqLoop()
 		}
 	}
 }
 
-func (c *Consumer) Start() {
+func (c *Consumer) kickReqLoop() {
 	select {
 	case c.kickChan <- struct{}{}:
 	default:
 	}
+}
+
+func (c *Consumer) Start() {
+	c.kickReqLoop()
 	go c.reqLoop()
 	go c.replyLoop()
 }

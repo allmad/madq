@@ -243,3 +243,35 @@ func TestNWriteMRead(t *testing.T) {
 
 	err = nil
 }
+
+func TestLFSPersist(t *testing.T) {
+	var err error
+	defer utils.TDefer(t, &err)
+
+	lfs, err := newIns()
+	if err != nil {
+		return
+	}
+
+	w, err := lfs.OpenWriter("/cao")
+	if err != nil {
+		return
+	}
+	w.Write([]byte("hello"))
+	w.Close()
+	lfs.Close()
+
+	lfs, err = New(cfg)
+	if err != nil {
+		return
+	}
+	r, err := lfs.OpenReader("/cao")
+	if err != nil {
+		return
+	}
+	buf := make([]byte, 5)
+	n, err := r.Read(buf)
+	if n != 5 || err != nil {
+		return
+	}
+}

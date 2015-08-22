@@ -71,7 +71,7 @@ func New(cfg *Config) (*Ins, error) {
 		cfg: cfg,
 		rfd: rfd,
 		wfd: wfd,
-		cp:  newCheckPoint(),
+		cp:  newCheckPoint(cfg.BlkBit, rfd),
 		ofs: make(map[string]*File),
 	}
 	go ins.readloop()
@@ -103,6 +103,20 @@ func (i *Ins) OpenWriter(name string) (*utils.Writer, error) {
 	return &utils.Writer{f, 0}, nil
 }
 
+// make a new one if not found
+// TODO: there is two lock here
+func (i *Ins) findIno(name string, blkBit uint) *Inode {
+	ino := NewInode(name, blkBit)
+	off := i.cp.GetInoOffset(name)
+	if off > 0 {
+		err := ino.PRead(utils.NewBufio(utils.NewReader(i.rfd, off)))
+		if err != nil {
+			logex.Error(err)
+		}
+	}
+	return ino
+}
+
 func (i *Ins) Open(name string) (*File, error) {
 	i.ofsGuard.RLock()
 	f := i.ofs[name]
@@ -112,7 +126,7 @@ func (i *Ins) Open(name string) (*File, error) {
 	}
 
 	i.ofsGuard.Lock()
-	f, err := openFile(i, NewInode(name, i.cfg.BlkBit), name)
+	f, err := openFile(i, i.findIno(name, i.cfg.BlkBit), name)
 	if err == nil {
 		i.ofs[name] = f
 	}
