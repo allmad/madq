@@ -259,19 +259,40 @@ func TestLFSPersist(t *testing.T) {
 	}
 	w.Write([]byte("hello"))
 	w.Close()
+
+	w, err = lfs.OpenWriter("/kk")
+	w.Write([]byte("jj"))
+	w.Close()
 	lfs.Close()
 
 	lfs, err = New(cfg)
 	if err != nil {
 		return
 	}
-	r, err := lfs.OpenReader("/cao")
+	buf := make([]byte, 5)
+	r, err := lfs.OpenReader("/kk")
 	if err != nil {
 		return
 	}
-	buf := make([]byte, 5)
-	n, err := r.Read(buf)
+	n, err := r.Read(buf[:2])
+	if n != 2 || err != nil {
+		return
+	}
+	if !bytes.Equal(buf[:2], []byte("jj")) {
+		err = logex.NewError("result not expect")
+		return
+	}
+
+	r, err = lfs.OpenReader("/cao")
+	if err != nil {
+		return
+	}
+
+	n, err = r.Read(buf)
 	if n != 5 || err != nil {
 		return
+	}
+	if !bytes.Equal(buf, []byte("hello")) {
+		err = logex.NewError("result not expect")
 	}
 }
