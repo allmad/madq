@@ -69,7 +69,7 @@ func (c *checkPoint) Restore(r *bitmap.File) (err error) {
 		break
 	}
 
-	// move off to next blk
+	// move offset to next blk
 	off = c.calFloor(off)
 
 	if c.Data == nil {
@@ -97,6 +97,7 @@ func (c *checkPoint) Restore(r *bitmap.File) (err error) {
 	}
 
 	if updated {
+		// write down anything which checkpoint is missing
 		err = logex.Trace(c.Save(utils.NewWriter(r, r.Size())))
 	}
 	return

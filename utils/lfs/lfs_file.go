@@ -65,7 +65,7 @@ func (ino *Inode) String() string {
 	return fmt.Sprintf("{%v, skip:%v, blks: %v}", ino.Name, ino.skipOff, blks)
 }
 
-// build a cache?
+// TODO: build a cache?
 func (ino *Inode) GetRawOff(offset int64) (int, int64) {
 	maxSize := int64(len(ino.blks)) << ino.blkBit
 	if offset > maxSize {

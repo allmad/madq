@@ -105,7 +105,7 @@ func (i *Ins) OpenWriter(name string) (*utils.Writer, error) {
 }
 
 // make a new one if not found
-// TODO: there is two lock here
+// TODO: there is two locks here
 func (i *Ins) findIno(name string, blkBit uint) *Inode {
 	ino := NewInode(name, blkBit)
 	off := i.cp.GetInoOffset(name)
