@@ -41,7 +41,6 @@ func TestInode(t *testing.T) {
 	}
 
 	if ino.PSize() != buf.Len() {
-		println(ino.String())
 		err = fmt.Errorf("PSize not work as expect, %v, %v",
 			ino.PSize(), buf.Len(),
 		)

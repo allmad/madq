@@ -101,7 +101,7 @@ func (i *Ins) OpenWriter(name string) (*utils.Writer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &utils.Writer{f, 0}, nil
+	return &utils.Writer{f, f.Size()}, nil
 }
 
 // make a new one if not found

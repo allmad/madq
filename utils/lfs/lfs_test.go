@@ -332,3 +332,41 @@ func TestLFSCheckPointRepair(t *testing.T) {
 		return
 	}
 }
+
+func TestFileSize(t *testing.T) {
+	var err error
+	defer utils.TDefer(t, &err)
+
+	lfs, err := newIns()
+	if err != nil {
+		return
+	}
+
+	f, err := lfs.Open("/hello")
+	if err != nil {
+		return
+	}
+	w := utils.NewWriter(f, f.Size())
+	_, err = w.Write([]byte("hello"))
+	if err != nil {
+		return
+	}
+	if f.Size() != 5 {
+		err = logex.NewError("fileSize not expected: ", f.Size())
+		return
+	}
+	w.Close()
+
+	// test restore
+	lfs, err = New(cfg)
+	if err != nil {
+		return
+	}
+	f, err = lfs.Open("/hello")
+	if err != nil {
+		return
+	}
+	if f.Size() != 5 {
+		err = logex.NewError("fileSize not expected: ", f.Size())
+	}
+}

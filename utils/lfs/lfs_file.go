@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"sync/atomic"
 
 	"gopkg.in/logex.v1"
 
@@ -28,11 +29,12 @@ var (
 )
 
 type Inode struct {
-	blkBit  uint
-	blkSize int64
-	Name    *rpc.String
-	skipOff int64 // something deleted
-	blks    []int64
+	blkBit   uint
+	blkSize  int64
+	Name     *rpc.String
+	fileSize int64
+	skipOff  int64 // something deleted
+	blks     []int64
 }
 
 func ReadInode(r io.Reader, blkBit uint) (*Inode, error) {
@@ -116,6 +118,11 @@ func (ino *Inode) ExtBlks(blkOff int64, size int, remains [][2]int) {
 			out = int64(remains[p][1])
 			p++
 		}
+		if out == 0 {
+			atomic.AddInt64(&ino.fileSize, ino.blkSize)
+		} else {
+			atomic.AddInt64(&ino.fileSize, out)
+		}
 		blk := ino.GenBlk(blkOff+int64(i)<<ino.blkBit, out)
 		ino.blks = append(ino.blks, blk)
 	}
@@ -166,6 +173,7 @@ func (ino *Inode) PRead(r io.Reader) (err error) {
 			return logex.Trace(err, i)
 		}
 		ino.blks[i] = ps.Int64()
+		atomic.AddInt64(&ino.fileSize, int64(ino.getSize(ino.blks[i])))
 	}
 
 	ino.Name, err = rpc.ReadString(r)
@@ -232,7 +240,7 @@ func (f *File) WriteAt(p []byte, off int64) (int, error) {
 }
 
 func (f *File) Size() int64 {
-	return 0
+	return atomic.LoadInt64(&f.ino.fileSize)
 }
 
 func (f *File) Close() error {
