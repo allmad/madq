@@ -53,6 +53,7 @@ func NewInode(name string, blkBit uint) *Inode {
 		Name:    rpc.NewString(name),
 		blkBit:  blkBit,
 		blkSize: 1 << blkBit,
+		blks:    make([]int64, 0, 102400),
 	}
 }
 
@@ -123,6 +124,7 @@ func (ino *Inode) ExtBlks(blkOff int64, size int, remains [][2]int) {
 		} else {
 			atomic.AddInt64(&ino.fileSize, out)
 		}
+
 		blk := ino.GenBlk(blkOff+int64(i)<<ino.blkBit, out)
 		ino.blks = append(ino.blks, blk)
 	}

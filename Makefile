@@ -28,3 +28,6 @@ bench-http:
 
 bench-file:
 	go test -v -benchtime 5s -benchmem -bench=Write256 -run=Nothing github.com/chzyer/muxque/utils/bitmap | scripts/addops.awk
+
+bench-lfs:
+	go test -v  -run=Nothing -bench=. github.com/chzyer/muxque/utils/lfs | scripts/addops.awk

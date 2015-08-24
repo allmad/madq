@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"io"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/chzyer/muxque/utils"
 	"github.com/chzyer/muxque/utils/bitmap"
@@ -214,14 +216,27 @@ func (o *Ins) readAt(f *File, p []byte, off int64) (int, error) {
 func (o *Ins) fillBuf(p []byte, extendSize int) ([]byte, int, int) {
 	fillsize := 0
 	remain := len(p) & (o.cfg.blkSize - 1)
-	if remain > 0 {
-		fillsize += o.cfg.blkSize - remain
-		p = append(p, o.cfg.emptyBlk[:o.cfg.blkSize-remain]...)
+
+	a := false
+	if a {
+		if remain > 0 {
+			fillsize += o.cfg.blkSize - remain
+			p = append(p, o.cfg.emptyBlk[:o.cfg.blkSize-remain]...)
+		}
+
+		for i := 0; i < extendSize; i++ {
+			fillsize += o.cfg.blkSize
+			p = append(p, o.cfg.emptyBlk...)
+		}
 	}
-	for i := 0; i < extendSize; i++ {
-		fillsize += o.cfg.blkSize
-		p = append(p, o.cfg.emptyBlk...)
+
+	if !a {
+		size := len(p) + (o.cfg.blkSize - remain) + extendSize<<o.cfg.BlkBit
+		buf := make([]byte, size)
+		copy(buf, p)
+		p = buf
 	}
+
 	return p, fillsize, remain
 }
 
@@ -233,6 +248,21 @@ func (o *Ins) plusBlkOffset(start int64, size int) int64 {
 	return start + int64(size)<<o.cfg.BlkBit
 }
 
+var (
+	a, b, c int64
+)
+
+func init() {
+	go func() {
+		for _ = range time.Tick(time.Second) {
+			a := atomic.SwapInt64(&a, 0)
+			b := atomic.SwapInt64(&b, 0)
+			c := atomic.SwapInt64(&c, 0)
+			println(time.Duration(a/b).String(), c/b, b)
+		}
+	}()
+}
+
 func (o *Ins) writeAt(f *File, p []byte, off int64) (int, error) {
 	// calculate inode staff
 	inoRawSize := o.calInoRawSize(p, f.ino)
@@ -240,19 +270,22 @@ func (o *Ins) writeAt(f *File, p []byte, off int64) (int, error) {
 
 	// fill buffer, and alloc it
 	p, fsize, remain := o.fillBuf(p, inoBlkSize)
-	remain = remain
-	blkOff, size := o.allocBlks(p)
+	atomic.AddInt64(&c, int64(len(f.ino.blks)))
+	atomic.AddInt64(&b, 1)
 
+	blkOff, size := o.allocBlks(p)
 	curBlkSize := f.ino.BlkSize()
 	f.ino.ExtBlks(blkOff, size-inoBlkSize, [][2]int{
 		{size - 1 - inoBlkSize, remain},
 	})
 
+	now := time.Now()
 	// start writing ino
 	inoOff := len(p) - inoBlkSize*o.cfg.blkSize
 	if err := f.ino.PWrite(bytes.NewBuffer(p[inoOff:inoOff])); err != nil {
 		panic(err)
 	}
+	atomic.AddInt64(&a, time.Now().Sub(now).Nanoseconds())
 
 	//println(f.ino.String())
 
