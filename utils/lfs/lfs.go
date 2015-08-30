@@ -1,12 +1,13 @@
 package lfs
 
 import (
-	"bytes"
+	"errors"
 	"io"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/chzyer/muxque/rpc"
 	"github.com/chzyer/muxque/utils"
 	"github.com/chzyer/muxque/utils/bitmap"
 	"gopkg.in/logex.v1"
@@ -15,10 +16,14 @@ import (
 const (
 	BlkBit     = 12
 	SegmentBit = 22
+
+	MaxWriteBuf    = 4 << 20
+	FlushThreshold = int(MaxWriteBuf*80) / 100
+	FlushInterval  = 10 * time.Millisecond
 )
 
 var (
-	ErrWriteShort = logex.Define("write too short")
+	ErrShortWrite = logex.Define("write too short")
 )
 
 // log structured file system implementation
@@ -30,6 +35,10 @@ type Ins struct {
 
 	rfd *bitmap.File
 	wfd *bitmap.File
+
+	wch chan *wctx
+
+	stopCh chan struct{}
 
 	ofs      map[string]*File
 	ofsGuard sync.RWMutex
@@ -71,11 +80,13 @@ func New(cfg *Config) (*Ins, error) {
 	}
 
 	ins := &Ins{
-		cfg: cfg,
-		rfd: rfd,
-		wfd: wfd,
-		cp:  newCheckPoint(cfg.BlkBit, rfd),
-		ofs: make(map[string]*File),
+		cfg:    cfg,
+		rfd:    rfd,
+		wfd:    wfd,
+		wch:    make(chan *wctx, 1<<3),
+		stopCh: make(chan struct{}),
+		cp:     newCheckPoint(cfg.BlkBit, rfd),
+		ofs:    make(map[string]*File),
 	}
 	go ins.readloop()
 	go ins.writeloop()
@@ -86,8 +97,85 @@ func (i *Ins) readloop() {
 
 }
 
-func (i *Ins) writeloop() {
+type wctx struct {
+	f     *File
+	off   int64
+	buf   []byte
+	reply chan error
+}
 
+func (i *Ins) writeloop() {
+	var (
+		ctx   *wctx
+		ctxs  []*wctx
+		flush bool
+		err   error
+
+		blkbuf   = utils.NewBlk(MaxWriteBuf)
+		timer    = time.NewTimer(FlushInterval)
+		blkSize  = i.cfg.blkSize
+		rawStart = i.cp.blkOff
+	)
+
+	for {
+		timer.Reset(FlushInterval)
+		if ctx != nil {
+			select {
+			case ctx = <-i.wch:
+				ctxs = append(ctxs, ctx)
+			case <-timer.C:
+				flush = true
+			case <-i.stopCh:
+				return
+			}
+		}
+
+		if ctx != nil {
+			if blkbuf.Remain() < len(ctx.buf)+blkSize { // inode: blkSize
+				if len(ctx.buf) > MaxWriteBuf {
+					// just write
+					continue
+				}
+				goto flush
+			}
+
+			blkStart := rawStart + int64(blkbuf.Len())
+			ctx.f.ino.ExtBlks(blkStart, len(ctx.buf))
+			_, err = blkbuf.Write(ctx.buf)
+			if err != nil {
+				ctx.reply <- logex.Trace(err)
+				continue
+			}
+
+			// i.cp.SetInoOffset(ctx.f.name, woff+int64(inoOff))
+			// reply
+			ctx.reply <- nil
+			ctx = nil
+		}
+
+		if blkbuf.Len() > FlushThreshold {
+			flush = true
+		}
+		if !flush || blkbuf.Len() == 0 {
+			continue
+		}
+
+	flush:
+
+		rawOff, _ := i.allocBlks(blkbuf.Bytes())
+		n, err := i.wfd.WriteAt(blkbuf.Bytes(), rawOff)
+		if err == nil && n != blkbuf.Len() {
+			err = ErrShortWrite
+		}
+		if err != nil {
+			// notify all
+			logex.Error(err)
+		}
+		//blkbuf.WriteTo(i.wfd)
+		ctxs = ctxs[:0]
+		flush = false
+		rawStart = i.cp.blkOff
+	}
 }
 
 func (i *Ins) OpenReader(name string) (*utils.Reader, error) {
@@ -109,7 +197,7 @@ func (i *Ins) OpenWriter(name string) (*utils.Writer, error) {
 // make a new one if not found
 // TODO: there is two locks here
 func (i *Ins) findIno(name string, blkBit uint) *Inode {
-	ino := NewInode(name, blkBit)
+	ino, _ := NewInode(rpc.NewString(name), blkBit)
 	off := i.cp.GetInoOffset(name)
 	if off > 0 {
 		err := ino.PRead(utils.NewBufio(utils.NewReader(i.rfd, off)))
@@ -137,22 +225,20 @@ func (i *Ins) Open(name string) (*File, error) {
 	return f, logex.Trace(err)
 }
 
-func (i *Ins) calBlkSize(size int) int {
-	blkSize := size >> i.cfg.BlkBit
+func (i *Ins) calBlkcnt(size int) int {
+	blkcnt := size >> i.cfg.BlkBit
 	if size&(i.cfg.blkSize-1) != 0 {
-		blkSize++
+		blkcnt++
 	}
-	return blkSize
+	return blkcnt
 }
 
 // return offsets
-func (i *Ins) allocBlks(p []byte) (startOff int64, size int) {
-	blkSize := i.calBlkSize(len(p))
-	i.cpGuard.Lock()
+func (i *Ins) allocBlks(p []byte) (startOff int64, cnt int) {
+	blkcnt := i.calBlkcnt(len(p))
 	startOff = i.cp.blkOff
-	i.cp.blkOff += int64(blkSize) * int64(i.cfg.blkSize)
-	i.cpGuard.Unlock()
-	return startOff, blkSize
+	i.cp.blkOff += int64(blkcnt) * int64(i.cfg.blkSize)
+	return startOff, blkcnt
 }
 
 func (i *Ins) closeFile(f *File) error {
@@ -217,31 +303,21 @@ func (o *Ins) fillBuf(p []byte, extendSize int) ([]byte, int, int) {
 	fillsize := 0
 	remain := len(p) & (o.cfg.blkSize - 1)
 
-	a := false
-	if a {
-		if remain > 0 {
-			fillsize += o.cfg.blkSize - remain
-			p = append(p, o.cfg.emptyBlk[:o.cfg.blkSize-remain]...)
-		}
-
-		for i := 0; i < extendSize; i++ {
-			fillsize += o.cfg.blkSize
-			p = append(p, o.cfg.emptyBlk...)
-		}
+	if remain > 0 {
+		fillsize += o.cfg.blkSize - remain
+		p = append(p, o.cfg.emptyBlk[:o.cfg.blkSize-remain]...)
 	}
 
-	if !a {
-		size := len(p) + (o.cfg.blkSize - remain) + extendSize<<o.cfg.BlkBit
-		buf := make([]byte, size)
-		copy(buf, p)
-		p = buf
+	for i := 0; i < extendSize; i++ {
+		fillsize += o.cfg.blkSize
+		p = append(p, o.cfg.emptyBlk...)
 	}
 
 	return p, fillsize, remain
 }
 
 func (o *Ins) calInoRawSize(newData []byte, ino *Inode) int {
-	return ino.RawSize(o.calBlkSize(len(newData)))
+	return ino.RawSize(o.calBlkcnt(len(newData)))
 }
 
 func (o *Ins) plusBlkOffset(start int64, size int) int64 {
@@ -258,50 +334,28 @@ func init() {
 			a := atomic.SwapInt64(&a, 0)
 			b := atomic.SwapInt64(&b, 0)
 			c := atomic.SwapInt64(&c, 0)
-			println(time.Duration(a/b).String(), c/b, b)
+			if b != 0 {
+				println(time.Duration(a/b).String(), c/b, b)
+			}
 		}
 	}()
 }
 
-func (o *Ins) writeAt(f *File, p []byte, off int64) (int, error) {
-	// calculate inode staff
-	inoRawSize := o.calInoRawSize(p, f.ino)
-	inoBlkSize := o.calBlkSize(inoRawSize)
-
-	// fill buffer, and alloc it
-	p, fsize, remain := o.fillBuf(p, inoBlkSize)
-	atomic.AddInt64(&c, int64(len(f.ino.blks)))
-	atomic.AddInt64(&b, 1)
-
-	blkOff, size := o.allocBlks(p)
-	curBlkSize := f.ino.BlkSize()
-	f.ino.ExtBlks(blkOff, size-inoBlkSize, [][2]int{
-		{size - 1 - inoBlkSize, remain},
-	})
-
-	now := time.Now()
-	// start writing ino
-	inoOff := len(p) - inoBlkSize*o.cfg.blkSize
-	if err := f.ino.PWrite(bytes.NewBuffer(p[inoOff:inoOff])); err != nil {
-		panic(err)
+func (o *Ins) writeAt(f *File, p []byte, off int64) (n int, err error) {
+	ctx := &wctx{
+		f:     f,
+		off:   off,
+		buf:   p,
+		reply: make(chan error),
 	}
-	atomic.AddInt64(&a, time.Now().Sub(now).Nanoseconds())
-
-	//println(f.ino.String())
-
-	// write to fs
-	woff, _ := f.ino.GetBlk(curBlkSize)
-	n, err := o.wfd.WriteAt(p, woff)
-	if err == nil && n != len(p) {
-		err = ErrWriteShort.Trace(n, len(p))
+	select {
+	case o.wch <- ctx:
+		err = <-ctx.reply
+	case <-o.stopCh:
+		err = errors.New("closed")
 	}
-	if err != nil {
-		// revent ino
-		f.ino.TrunBlk(curBlkSize)
-		return n, logex.Trace(err)
-	}
-	o.cp.SetInoOffset(f.name, woff+int64(inoOff))
-	return n - fsize, nil
+
+	return len(p), err
 }
 
 func (i *Ins) Pruge() {
@@ -314,7 +368,7 @@ func (i *Ins) FlushCheckPoint() error {
 }
 
 func (i *Ins) Close() {
-	// logex.Info(i.cp)
+	close(i.stopCh)
 	i.rfd.Close()
 	if err := i.FlushCheckPoint(); err != nil {
 		logex.Error(err)
