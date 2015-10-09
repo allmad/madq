@@ -1,0 +1,10 @@
+#!/bin/bash -e
+echo -n > pkg.list.tmp
+cwd=`pwd`
+cat pkg.list | awk '{print $1}' | while read a; do
+	path="src/$a"
+	echo -n $a" "
+	cd $cwd/$path
+	git --no-pager log -n 1 --oneline | awk '{print $1}'
+done >> pkg.list.tmp
+mv pkg.list.tmp pkg.list

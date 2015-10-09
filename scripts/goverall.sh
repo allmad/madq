@@ -6,7 +6,7 @@ set -e
 output_null=""
 output_file=".cover.out"
 
-list_cmd="go list ./..."
+list_cmd="go list ./... | grep -v muxque"
 if [[ "$2" != "" ]]; then
 	list_cmd="echo '$2'"
 fi
