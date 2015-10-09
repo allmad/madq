@@ -3,9 +3,9 @@ package bench
 import (
 	"testing"
 
-	"github.com/chzyer/muxque/api"
-	"github.com/chzyer/muxque/rpc/message"
-	"github.com/chzyer/muxque/utils"
+	"github.com/chzyer/fsmq/api"
+	"github.com/chzyer/fsmq/rpc/message"
+	"github.com/chzyer/fsmq/utils"
 )
 
 func min(a, b int) int {

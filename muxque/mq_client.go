@@ -9,9 +9,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/chzyer/muxque/rpc"
-	"github.com/chzyer/muxque/rpc/message"
-	"github.com/chzyer/muxque/utils"
+	"github.com/chzyer/fsmq/rpc"
+	"github.com/chzyer/fsmq/rpc/message"
+	"github.com/chzyer/fsmq/utils"
 
 	"gopkg.in/logex.v1"
 )

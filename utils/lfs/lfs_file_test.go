@@ -5,10 +5,10 @@ import (
 	"reflect"
 	"testing"
 
-	"gopkg.in/logex.v1"
+	"github.com/chzyer/fsmq/rpc"
+	"github.com/chzyer/fsmq/utils"
 
-	"github.com/chzyer/muxque/rpc"
-	"github.com/chzyer/muxque/utils"
+	"gopkg.in/logex.v1"
 )
 
 func TestInode(t *testing.T) {

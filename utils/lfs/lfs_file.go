@@ -3,9 +3,9 @@ package lfs
 import (
 	"sync/atomic"
 
-	"gopkg.in/logex.v1"
+	"github.com/chzyer/fsmq/rpc"
 
-	"github.com/chzyer/muxque/rpc"
+	"gopkg.in/logex.v1"
 )
 
 var _ rpc.ItemStruct = new(Inode)

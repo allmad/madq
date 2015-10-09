@@ -5,12 +5,12 @@ import (
 	"sync"
 	"testing"
 
-	"gopkg.in/logex.v1"
+	"github.com/chzyer/fsmq/muxque"
+	"github.com/chzyer/fsmq/muxque/topic"
+	"github.com/chzyer/fsmq/rpc/message"
+	"github.com/chzyer/fsmq/utils"
 
-	"github.com/chzyer/muxque/muxque"
-	"github.com/chzyer/muxque/muxque/topic"
-	"github.com/chzyer/muxque/rpc/message"
-	"github.com/chzyer/muxque/utils"
+	"gopkg.in/logex.v1"
 )
 
 var (

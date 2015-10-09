@@ -6,8 +6,8 @@ import (
 	"io"
 	"sync"
 
-	"github.com/chzyer/muxque/utils"
-	"github.com/chzyer/muxque/utils/bitmap"
+	"github.com/chzyer/fsmq/utils"
+	"github.com/chzyer/fsmq/utils/bitmap"
 
 	"gopkg.in/logex.v1"
 )

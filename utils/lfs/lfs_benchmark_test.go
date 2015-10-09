@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/chzyer/muxque/utils"
+	"github.com/chzyer/fsmq/utils"
 )
 
 func BenchmarkWrite(b *testing.B) {

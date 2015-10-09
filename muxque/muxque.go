@@ -3,9 +3,10 @@ package mq
 import (
 	"sync"
 
-	"github.com/chzyer/muxque/muxque/topic"
-	"github.com/chzyer/muxque/rpc"
-	"github.com/chzyer/muxque/rpc/message"
+	"github.com/chzyer/fsmq/muxque/topic"
+	"github.com/chzyer/fsmq/rpc"
+	"github.com/chzyer/fsmq/rpc/message"
+
 	"gopkg.in/logex.v1"
 )
 

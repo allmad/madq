@@ -3,7 +3,7 @@ package rpc
 import (
 	"io"
 
-	"github.com/chzyer/muxque/rpc/message"
+	"github.com/chzyer/fsmq/rpc/message"
 
 	"gopkg.in/logex.v1"
 )

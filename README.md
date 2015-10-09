@@ -1,10 +1,10 @@
 # Muxque (WIP)
 
-[![Build Status](https://travis-ci.org/chzyer/muxque.svg?branch=master)](https://travis-ci.org/chzyer/muxque)
-[![Coverage Status](https://coveralls.io/repos/chzyer/muxque/badge.svg?branch=master&service=github)](https://coveralls.io/github/chzyer/muxque?branch=master)
+[![Build Status](https://travis-ci.org/chzyer/fsmq.svg?branch=master)](https://travis-ci.org/chzyer/fsmq)
+[![Coverage Status](https://coveralls.io/repos/chzyer/fsmq/badge.svg?branch=master&service=github)](https://coveralls.io/github/chzyer/fsmq?branch=master)
 [![Software License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE.md)
 
-muxque is design to use in IM, follows pub/sub model, to achieve serve millions users by multiplex sockets.
+fsmq is design to use in IM, follows pub/sub model, to achieve serve millions users by multiplex sockets.
 
 ### goal
 ---
@@ -44,34 +44,34 @@ muxque is design to use in IM, follows pub/sub model, to achieve serve millions 
 ```
 $ go run debug/bench/httpserver/server.go
 $ make bench-http
-go test -v -benchtime 10s -benchmem -bench=Http -run=Nothing github.com/chzyer/muxque/debug/bench | scripts/addops.awk
+go test -v -benchtime 10s -benchmem -bench=Http -run=Nothing github.com/chzyer/fsmq/debug/bench | scripts/addops.awk
 testing: warning: no tests to run
 PASS
 BenchmarkHttpPut	 5000000	      2478 ns/op (403551 op/s) 		      16 B/op	       0 allocs/op
-ok  	github.com/chzyer/muxque/debug/bench	14.875s
+ok  	github.com/chzyer/fsmq/debug/bench	14.875s
 ```
 
 * sync api (single client wait until server reply)
 
 ```
 $ make bench-sync-api
-go test -v -benchtime 10s -benchmem -bench=ApiSync -run=Nothing github.com/chzyer/muxque/debug/bench | scripts/addops.awk
+go test -v -benchtime 10s -benchmem -bench=ApiSync -run=Nothing github.com/chzyer/fsmq/debug/bench | scripts/addops.awk
 testing: warning: no tests to run
 PASS
 BenchmarkApiSyncGet	 5000000	      2502 ns/op (399680 op/s) 		     332 B/op	       3 allocs/op
 BenchmarkApiSyncPut	10000000	      1921 ns/op (520562 op/s) 		       2 B/op	       0 allocs/op
-ok  	github.com/chzyer/muxque/debug/bench	48.126s
+ok  	github.com/chzyer/fsmq/debug/bench	48.126s
 ```
 
 * internal test (without network)
 
 ```
 $ make bench-topic
-go test -v -benchtime 10s -benchmem -bench=. -run=Nothing github.com/chzyer/muxque/muxque/topic | scripts/addops.awk
+go test -v -benchtime 10s -benchmem -bench=. -run=Nothing github.com/chzyer/fsmq/muxque/topic | scripts/addops.awk
 PASS
 BenchmarkTopicGet	20000000	      1839 ns/op (543774 op/s) 		 146.24 MB/s	     430 B/op	       5 allocs/op
 BenchmarkTopicPut	20000000	      1034 ns/op (967118 op/s) 		 260.06 MB/s	     405 B/op	       2 allocs/op
-ok  	github.com/chzyer/muxque/muxque/topic	73.963s
+ok  	github.com/chzyer/fsmq/muxque/topic	73.963s
 ```
 
 * nsq

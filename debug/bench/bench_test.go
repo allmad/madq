@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/chzyer/muxque/rpc/message"
-	"github.com/chzyer/muxque/utils"
+	"github.com/chzyer/fsmq/rpc/message"
+	"github.com/chzyer/fsmq/utils"
 )
 
 func BenchmarkHttpPut(b *testing.B) {

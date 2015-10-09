@@ -4,8 +4,9 @@ import (
 	"container/list"
 	"io"
 
-	"github.com/chzyer/muxque/rpc"
-	"github.com/chzyer/muxque/utils"
+	"github.com/chzyer/fsmq/rpc"
+	"github.com/chzyer/fsmq/utils"
+
 	"gopkg.in/logex.v1"
 )
 

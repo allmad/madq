@@ -4,7 +4,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/chzyer/muxque/muxque/topic"
+	"github.com/chzyer/fsmq/muxque/topic"
 
 	"gopkg.in/logex.v1"
 )

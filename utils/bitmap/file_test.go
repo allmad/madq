@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chzyer/muxque/utils"
+	"github.com/chzyer/fsmq/utils"
 
 	"gopkg.in/logex.v1"
 )

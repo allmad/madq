@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chzyer/muxque/rpc"
+	"github.com/chzyer/fsmq/rpc"
 )
 
 func BenchmarkApiPing(b *testing.B) {

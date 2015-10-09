@@ -1,6 +1,6 @@
 package topic
 
-import "github.com/chzyer/muxque/rpc"
+import "github.com/chzyer/fsmq/rpc"
 
 // a client has multiple waiters
 //

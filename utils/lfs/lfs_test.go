@@ -6,9 +6,9 @@ import (
 	"io"
 	"testing"
 
-	"gopkg.in/logex.v1"
+	"github.com/chzyer/fsmq/utils"
 
-	"github.com/chzyer/muxque/utils"
+	"gopkg.in/logex.v1"
 )
 
 func safeReadExpect(r io.Reader, buf []byte) error {
