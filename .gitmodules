@@ -1,0 +1,3 @@
+[submodule "fsmq-go"]
+	path = fsmq-go
+	url = git@github.com:chzyer/fsmq-go.git
