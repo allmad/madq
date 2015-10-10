@@ -1,3 +1,3 @@
 [submodule "deps/src/gopkg.in/logex.v1"]
 	path = deps/src/gopkg.in/logex.v1
-	url = git@github.com:chzyer/logex.git
+	url = https://gopkg.in/logex.v1
