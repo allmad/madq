@@ -2,7 +2,10 @@ all:
 	go install ./...
 
 test:
-	go test ./...
+	go test -v ./...
 
 cover:
 	@../scripts/goverall.sh
+
+show-cover:
+	@../scripts/goverall.sh html

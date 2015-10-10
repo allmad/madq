@@ -14,7 +14,7 @@ deps:
 	@git submodule update
 
 test:
-	@make -C fsmq test
+	go test -v $(PKG)/fsmq/...
 
 clean:
 	go clean ./...
@@ -23,6 +23,9 @@ clean:
 
 cover:
 	@make -C fsmq cover
+
+show-cover:
+	@make -C fsmq show-cover
 
 find-todo:
 	@find . -name '*.go' | xargs grep -n TODO
