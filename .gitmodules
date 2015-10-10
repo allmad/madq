@@ -1,3 +1,6 @@
 [submodule "deps/src/gopkg.in/logex.v1"]
 	path = deps/src/gopkg.in/logex.v1
 	url = https://gopkg.in/logex.v1
+[submodule "deps/src/github.com/chzyer/flagx"]
+	path = deps/src/github.com/chzyer/flagx
+	url = https://github.com/chzyer/flagx
