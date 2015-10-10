@@ -1,29 +1,25 @@
-export GOPATH=$(shell echo $$GOPATH):$(shell pwd)/build:$(shell pwd)/deps
-export GOBIN=$(shell pwd)/build/bin
+export GOPATH=$(shell echo $$GOPATH):$(shell pwd)/deps
+export GOBIN=$(shell pwd)/bin
 export PKG=github.com/chzyer/fsmq
 .PHONY: deps
 
-build/bin/fsmq: bootstrap
+bin/fsmq: deps
 	@make -C fsmq
-
-bootstrap: deps
-	@mkdir -p build
-	@env lib=$(PKG) scripts/check_source.sh
 
 deps:
 	@git submodule init
 	@git submodule sync >/dev/null
 	@git submodule update
 
-test: bootstrap
-	go test -v $(PKG)/fsmq/...
+test: deps
+	@make -C fsmq test
 
 clean:
 	go clean ./...
-	rm -fr build
+	rm -fr bin
 	git submodule deinit .
 
-cover: bootstrap
+cover: deps
 	@make -C fsmq cover
 
 show-cover:

@@ -5,3 +5,16 @@
 [![Software License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE.md)
 
 FsMQ stand for FileSystem as Message Queue
+
+## Quick Start
+
+### Pre-requirement
+* Go >= 1.4.1
+* already set $GOPATH
+
+```
+go get github.com/chzyer/fsmq
+cd $GOPATH/src/github.com/chzyer/fsmq
+make
+bin/fsmq
+```

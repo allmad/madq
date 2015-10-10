@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
-
-	"reflect"
 
 	"gopkg.in/logex.v1"
 )
