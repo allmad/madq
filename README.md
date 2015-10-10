@@ -8,13 +8,21 @@ FsMQ stand for FileSystem as Message Queue
 
 ## Quick Start
 
-### Pre-requirement
-* Go >= 1.4.1
-* already set $GOPATH
+### Requirement
 
+* Go >= 1.4.1
+
+```{shell}
+$ go get github.com/chzyer/fsmq
+$ cd $GOPATH/src/github.com/chzyer/fsmq
+$ make # everything will done
+$ bin/fsmq -h # execute fsmq now!
 ```
-go get github.com/chzyer/fsmq
-cd $GOPATH/src/github.com/chzyer/fsmq
-make
-bin/fsmq
+
+Notice:
+
+If you meet 
 ```
+package github.com/chzyer/fsmq: cannot download, $GOPATH not set. For more details see: go help gopath
+```
+please set your $GOPATH or just execute `export GOPATH=$(pwd)`(for *nix)
