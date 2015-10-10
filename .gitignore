@@ -1,5 +1,3 @@
 .cover*
 /build
-deps/src/
-deps/vers/
 deps/pkg/

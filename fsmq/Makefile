@@ -1,2 +1,5 @@
 all:
-	go install
+	go install ./...
+
+test:
+	go test ./...
