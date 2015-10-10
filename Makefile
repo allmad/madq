@@ -16,7 +16,7 @@ test: deps
 
 clean:
 	go clean ./...
-	rm -fr bin
+	rm -fr bin deps/pkg
 	git submodule deinit .
 
 cover: deps

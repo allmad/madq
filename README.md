@@ -6,11 +6,9 @@
 
 FsMQ stand for FileSystem as Message Queue
 
-## Quick Start
+## Build from source
 
-### Requirement
-
-* Go >= 1.4.1
+* [Golang](https://golang.org/dl/) >= 1.4.1
 
 ```{shell}
 $ go get github.com/chzyer/fsmq
