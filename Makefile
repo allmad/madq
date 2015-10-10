@@ -3,17 +3,19 @@ export GOBIN=$(shell pwd)/build/bin
 export PKG=github.com/chzyer/fsmq
 .PHONY: deps
 
-build/bin/fsmq: deps
+build/bin/fsmq: bootstrap
+	@make -C fsmq
+
+bootstrap: deps
 	@mkdir -p build
 	@env lib=$(PKG) scripts/check_source.sh
-	@make -C fsmq
 
 deps:
 	@git submodule init
 	@git submodule sync >/dev/null
 	@git submodule update
 
-test:
+test: bootstrap
 	go test -v $(PKG)/fsmq/...
 
 clean:
@@ -21,7 +23,7 @@ clean:
 	rm -fr build
 	git submodule deinit .
 
-cover:
+cover: bootstrap
 	@make -C fsmq cover
 
 show-cover:
