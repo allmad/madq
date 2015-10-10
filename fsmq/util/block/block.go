@@ -13,12 +13,14 @@ import (
 
 const (
 	DefaultBit = 22
+	MaxBit     = 32
 	SlotSize   = 8
 )
 
 var (
 	ErrInvalidOffset = logex.Define("block: invalid offset")
 	ErrBlockClosed   = logex.Define("block: closed")
+	ErrInvalidBit    = logex.Define("block: invalid bit")
 )
 
 type Instance struct {
@@ -32,6 +34,9 @@ type Instance struct {
 }
 
 func New(path string, bit uint) (*Instance, error) {
+	if bit > MaxBit {
+		return nil, ErrInvalidBit
+	}
 	if err := os.MkdirAll(path, 0777); err != nil {
 		return nil, logex.Trace(err)
 	}
@@ -99,7 +104,7 @@ func (i *Instance) ReadAt(p []byte, off int64) (n int, err error) {
 		return n, logex.Trace(err)
 	}
 
-	n2, err := i.ReadAt(p[:sizeLeft], (idx+1)<<i.bit)
+	n2, err := i.ReadAt(p[sizeLeft:], (idx+1)<<i.bit)
 	if err != nil {
 		err = logex.Trace(err)
 	}
@@ -148,6 +153,7 @@ func (i *Instance) Delete(close bool) error {
 		return logex.Trace(err)
 	}
 	if !close { // reopen
+		os.MkdirAll(i.root, 0777)
 		atomic.SwapInt32(&i.closed, 0)
 	}
 	return nil
