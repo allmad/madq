@@ -1,11 +1,11 @@
-build_list=$(shell go list ./... | grep -v muxque)
 export GOPATH=$(shell echo $$GOPATH):$(shell pwd)/build:$(shell pwd)/deps
 export GOBIN=$(shell pwd)/build/bin
+export PKG=github.com/chzyer/fsmq
 .PHONY: deps
 
 build/bin/fsmq: deps
 	@mkdir -p build
-	@scripts/check_source.sh
+	@env lib=$(PKG) scripts/check_source.sh
 	@make -C fsmq
 
 deps:
