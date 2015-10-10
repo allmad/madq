@@ -11,12 +11,15 @@ build/bin/fsmq: deps
 deps:
 	@git submodule init
 	@git submodule sync >/dev/null
+	@git submodule update
 
 test:
 	make -C fsmq test
 
 clean:
+	go clean ./...
 	rm -fr build
+	git submodule deinit .
 
 cover:
 	@make -C fsmq cover
