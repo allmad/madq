@@ -3,3 +3,6 @@ all:
 
 test:
 	go test ./...
+
+cover:
+	@../scripts/goverall.sh

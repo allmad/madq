@@ -19,7 +19,7 @@ clean:
 	rm -fr build
 
 cover:
-	@./scripts/goverall.sh
+	@make -C fsmq cover
 
 find-todo:
 	@find . -name '*.go' | xargs grep -n TODO

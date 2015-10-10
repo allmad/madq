@@ -1,6 +1,4 @@
-#!/bin/bash
-set -e
-
+#!/bin/bash -e
 # usage: ./goverall.sh [func|html]
 # default: generate cover.out
 output_null=""
@@ -14,6 +12,9 @@ fi
 mkdir -p .cover
 eval "$list_cmd" | xargs -I% bash -c 'name="%"; go test % --coverprofile=.cover/${name//\//_}'$output_null
 echo "mode: set" > $output_file
+if [[ `ls .cover/* 2>/dev/null` == "" ]]; then
+	exit
+fi
 cat .cover/* | grep -v mode >> $output_file
 rm -r .cover
 
