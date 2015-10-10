@@ -20,7 +20,7 @@ var (
 func TestBlockException(t *testing.T) {
 	defer test.New(t)
 
-	_, err := New(root, 1<<33)
+	_, err := New(root, 33)
 	test.NotNil(err)
 
 	_, err = New("/usr/bin/notperm", 11)
