@@ -14,4 +14,4 @@ before_install:
   - go get github.com/chzyer/flagx
 script:
   - make cover
-  - bash -c "goveralls -service=travis-ci -coverprofile=.cover.out | tee"
+  - bash -c "goveralls -service=travis-ci -coverprofile=fsmq/.cover.out | tee"
