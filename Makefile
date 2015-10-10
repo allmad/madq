@@ -14,7 +14,7 @@ deps:
 	@git submodule update
 
 test:
-	make -C fsmq test
+	@make -C fsmq test
 
 clean:
 	go clean ./...
