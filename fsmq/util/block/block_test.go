@@ -23,7 +23,7 @@ func TestBlockException(t *testing.T) {
 	_, err := New(root, 33)
 	test.NotNil(err)
 
-	_, err = New("/usr/bin/notperm", 11)
+	_, err = New("/notperm", 11)
 	test.NotNil(err)
 
 	f, err := New(root, 10)
