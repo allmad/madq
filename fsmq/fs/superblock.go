@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"encoding/binary"
 	"reflect"
 	"unsafe"
 
@@ -25,6 +26,14 @@ const (
 	LittleEndian ByteOrder = iota
 	BigEndian
 )
+
+func (b ByteOrder) Binary() (s binary.ByteOrder) {
+	s = binary.LittleEndian
+	if b == BigEndian {
+		s = binary.BigEndian
+	}
+	return s
+}
 
 func (b ByteOrder) String() string {
 	switch b {
@@ -64,9 +73,9 @@ func (s *Superblock) Size() int {
 func (s *Superblock) ByteOrder() ByteOrder {
 	num := 1
 	b := (*(*byte)(unsafe.Pointer(&num)))
-	bo := LittleEndian
+	bo := BigEndian
 	if b == 1 {
-		bo = BigEndian
+		bo = LittleEndian
 	}
 	return bo
 }

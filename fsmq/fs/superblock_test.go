@@ -13,9 +13,15 @@ var root = test.Root("/test/fs/checkpoint")
 func TestByteOrder(t *testing.T) {
 	defer test.New(t)
 	s := new(Superblock)
+	currentByteOrder := s.ByteOrder()
+	wrongByteOrder := LittleEndian
+	if wrongByteOrder == currentByteOrder {
+		wrongByteOrder = BigEndian
+	}
+
 	b := make([]byte, s.Size())
-	binary.LittleEndian.PutUint64(b, 1)
-	binary.LittleEndian.PutUint64(b[8:], 1)
+	currentByteOrder.Binary().PutUint64(b, uint64(currentByteOrder))
+	currentByteOrder.Binary().PutUint64(b[8:], 1)
 	test.Nil(s.Decode(b))
 
 	test.Equal(s.Decode(b[:16]), ErrSbInvalid)
@@ -24,12 +30,13 @@ func TestByteOrder(t *testing.T) {
 	binary.LittleEndian.PutUint64(b[8:], 0)
 	test.Equal(s.Decode(b), ErrSbInvalidVersion)
 
-	binary.LittleEndian.PutUint64(b, 0)
+	binary.LittleEndian.PutUint64(b, uint64(wrongByteOrder))
 	test.Equal(s.Decode(b), ErrByteOrderNotEqual)
 
 	LittleEndian.String()
 	BigEndian.String()
 	ByteOrder(-1).String()
+	wrongByteOrder.Binary()
 }
 
 func TestEncodeDecode(t *testing.T) {
