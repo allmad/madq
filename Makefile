@@ -23,7 +23,7 @@ cover: deps
 	@make -C fsmq cover
 
 show-cover:
-	@make -C fsmq show-cover
+	@make -C fsmq show-cover pkg=$(pkg)
 
 find-todo:
 	@find . -name '*.go' | xargs grep -n TODO

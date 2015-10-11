@@ -5,4 +5,4 @@ cover:
 	@../scripts/goverall.sh
 
 show-cover:
-	@../scripts/goverall.sh html
+	@../scripts/goverall.sh html $(pkg)

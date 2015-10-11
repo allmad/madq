@@ -29,9 +29,9 @@ func (r *Reader) Seek(offset int64, whence int) (ret int64, err error) {
 	return r.Offset, nil
 }
 
-func (r *Reader) Close() error {
+func (r *Reader) Close() (err error) {
 	if rc, ok := r.ReaderAt.(io.Closer); ok {
-		return rc.Close()
+		err = rc.Close()
 	}
-	return nil
+	return
 }

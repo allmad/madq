@@ -12,10 +12,11 @@ import (
 )
 
 var (
-	mainRoot       = ""
-	ErrNotExcept   = logex.Define("result not expect")
-	ErrNotEqual    = logex.Define("result not equals")
-	StrNotSuchFile = "no such file or directory"
+	mainRoot           = ""
+	ErrNotExcept       = logex.Define("result not expect")
+	ErrNotEqual        = logex.Define("result not equals")
+	ErrRequireNotEqual = logex.Define("result require not equals")
+	StrNotSuchFile     = "no such file or directory"
 )
 
 type testException struct {
@@ -86,6 +87,10 @@ func Equals(o ...interface{}) {
 	}
 }
 
+func NotEqual(a, b interface{}, e ...error) {
+	notEqual(1, a, b, e)
+}
+
 func Equal(a, b interface{}, e ...error) {
 	equal(1, a, b, e)
 }
@@ -96,6 +101,25 @@ func CheckError(e error, s string) {
 	}
 	if !strings.Contains(e.Error(), s) {
 		Panic(0, s)
+	}
+}
+
+func notEqual(d int, a, b interface{}, e []error) {
+	_, oka := a.(error)
+	_, okb := b.(error)
+	if oka && okb {
+		if logex.Equal(a.(error), b.(error)) {
+			Panic(d, fmt.Sprintf("%v: %v",
+				getErr(ErrRequireNotEqual, e),
+				a,
+			))
+		}
+		return
+	}
+	if reflect.DeepEqual(a, b) {
+		Panic(d, fmt.Sprintf("%v: %v",
+			getErr(ErrRequireNotEqual, e), a,
+		))
 	}
 }
 

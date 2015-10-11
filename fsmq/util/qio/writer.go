@@ -37,9 +37,9 @@ func (w *Writer) Seek(offset int64, whence int) (int64, error) {
 	return w.Offset, nil
 }
 
-func (w *Writer) Close() error {
+func (w *Writer) Close() (err error) {
 	if wc, ok := w.WriterAt.(io.Closer); ok {
-		return wc.Close()
+		err = wc.Close()
 	}
-	return nil
+	return
 }
