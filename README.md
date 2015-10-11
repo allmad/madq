@@ -17,6 +17,6 @@ $ make # everything will done
 $ bin/fsmq -h # execute fsmq now!
 ```
 
-> Notice:  
-> If you meet `cannot download, $GOPATH not set.`  
-> please set your `$GOPATH` or just execute `export GOPATH=$(pwd)` in shell.
+Notice:  
+If you meet `cannot download, $GOPATH not set.`  
+please set your `$GOPATH` or just execute `export GOPATH=$(pwd)` in shell.

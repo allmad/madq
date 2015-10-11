@@ -12,7 +12,7 @@ deps:
 	@git submodule update
 
 test: deps
-	@make -C fsmq test
+	go test -v $(PKG)/fsmq/...
 
 clean:
 	go clean ./...

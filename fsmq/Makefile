@@ -1,9 +1,6 @@
 all:
 	go install ./...
 
-test:
-	go test -v ./...
-
 cover:
 	@../scripts/goverall.sh
 

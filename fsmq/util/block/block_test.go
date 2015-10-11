@@ -14,7 +14,7 @@ var (
 	_ io.ReaderAt = b
 	_ io.WriterAt = b
 
-	root = test.GetRoot("/test/util/block")
+	root = test.Root("/test/util/block")
 )
 
 func TestBlockException(t *testing.T) {

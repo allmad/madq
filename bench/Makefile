@@ -1,4 +1,9 @@
-TIME=10s
+TIME=1s
+PKG=github.com/chzyer/fsmq/fsmq
+TEST=go test -v -benchtime $(TIME) -benchmem -run=Nothing
+block:
+	$(TEST) -bench=. $(PKG)/util/block  | ../scripts/addops.awk
+
 bench-message:
 	go test -v -benchtime $(TIME) -benchmem -bench=. -run=Nothing github.com/chzyer/fsmq/rpc/message | scripts/addops.awk
 

@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
-	"testing"
 
 	"gopkg.in/logex.v1"
 )
@@ -49,7 +48,11 @@ func Skip() {
 	panic(nil)
 }
 
-func New(t *testing.T) {
+type Failer interface {
+	FailNow()
+}
+
+func New(t Failer) {
 	err := recover()
 	if err == nil {
 		return
@@ -143,7 +146,7 @@ func Panic(depth int, obj interface{}) {
 	panic(t)
 }
 
-func GetRoot(s string) string {
+func Root(s string) string {
 	root := os.Getenv("TEST_ROOT")
 	if root == "" {
 		root = "/data/fsmq"
