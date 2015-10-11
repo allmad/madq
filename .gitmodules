@@ -4,6 +4,6 @@
 [submodule "deps/src/github.com/chzyer/flagx"]
 	path = deps/src/github.com/chzyer/flagx
 	url = https://github.com/chzyer/flagx
-[submodule "deps/src/github.com/chzyer/fsmq-go"]
-	path = deps/src/github.com/chzyer/fsmq-go
-	url = https://github.com/chzyer/fsmq-go
+[submodule "deps/src/github.com/chzyer/gofsmq"]
+	path = deps/src/github.com/chzyer/gofsmq
+	url = https://github.com/chzyer/gofsmq
