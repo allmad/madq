@@ -61,6 +61,10 @@ type SuperblockV1 struct {
 	SuperIndex [BlockSize]SuperIndex
 }
 
+func (s *SuperblockV1) Size() int {
+	return int(unsafe.Sizeof(*s))
+}
+
 type Superblock struct {
 	*SuperblockV1
 	ref *[]byte // hold on ref
@@ -108,11 +112,10 @@ func (s *Superblock) Decode(b []byte) error {
 	version := *(*int64)(unsafe.Pointer(sh.Data + 8))
 	switch version {
 	case 1:
-		sb := (*SuperblockV1)(unsafe.Pointer(sh.Data))
-		if int(unsafe.Sizeof(*sb)) != len(b) {
+		if s.SuperblockV1.Size() != len(b) {
 			return ErrSbInvalid.Trace(len(b))
 		}
-		s.SuperblockV1 = sb
+		s.SuperblockV1 = (*SuperblockV1)(unsafe.Pointer(sh.Data))
 	default:
 		return ErrSbInvalidVersion.Trace(version)
 	}
