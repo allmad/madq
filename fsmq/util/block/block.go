@@ -29,11 +29,12 @@ type Instance struct {
 	bit       uint
 	chunkSize int64
 	closed    int32
+	flag      int
 	wg        sync.WaitGroup
 	sync.Mutex
 }
 
-func New(path string, bit uint) (*Instance, error) {
+func New(path string, flag int, bit uint) (*Instance, error) {
 	if bit > MaxBit {
 		return nil, ErrInvalidBit
 	}
@@ -44,9 +45,13 @@ func New(path string, bit uint) (*Instance, error) {
 	if !strings.HasSuffix(path, sp) {
 		path += sp
 	}
+	if flag == 0 {
+		flag = os.O_RDWR
+	}
 	return &Instance{
 		root:      path,
 		bit:       bit,
+		flag:      flag,
 		chunkSize: 1 << bit,
 	}, nil
 }
@@ -65,7 +70,7 @@ func (i *Instance) getfile(off int64) (int64, *filectx, error) {
 		return idx, fctx, nil
 	}
 
-	newFctx, err := newFilectx(i.root, idx, &i.wg)
+	newFctx, err := newFilectx(i.root, idx, i.flag, &i.wg)
 	if err != nil {
 		i.Unlock()
 		return idx, nil, logex.Trace(err)
@@ -179,8 +184,8 @@ type filectx struct {
 	wg  *sync.WaitGroup
 }
 
-func newFilectx(base string, idx int64, wg *sync.WaitGroup) (*filectx, error) {
-	of, err := os.OpenFile(base+strconv.FormatInt(idx, 36), os.O_CREATE|os.O_RDWR, 0644)
+func newFilectx(base string, idx int64, flag int, wg *sync.WaitGroup) (*filectx, error) {
+	of, err := os.OpenFile(base+strconv.FormatInt(idx, 36), os.O_CREATE|flag, 0644)
 	if err != nil {
 		return nil, logex.Trace(err)
 	}

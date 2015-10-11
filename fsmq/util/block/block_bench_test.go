@@ -16,7 +16,7 @@ func BenchmarkBlockWrite(b *testing.B) {
 }
 
 func writeN(n int, b *testing.B) {
-	ins, err := New(root, DefaultBit)
+	ins, err := New(root, 0, DefaultBit)
 	test.Nil(err)
 	test.Nil(ins.Delete(false))
 	w := qio.NewWriter(ins, 0)
@@ -35,7 +35,7 @@ func BenchmarkBlockRead(b *testing.B) {
 	writeN(b.N, nil)
 
 	b.ResetTimer()
-	ins, err := New(root, DefaultBit)
+	ins, err := New(root, 0, DefaultBit)
 	test.Nil(err)
 	w := qio.NewReader(ins, 0)
 	buf := make([]byte, benchmarkSize)

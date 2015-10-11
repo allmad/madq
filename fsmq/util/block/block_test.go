@@ -20,13 +20,13 @@ var (
 func TestBlockException(t *testing.T) {
 	defer test.New(t)
 
-	_, err := New(root, 33)
+	_, err := New(root, 0, 33)
 	test.NotNil(err)
 
-	_, err = New("/notperm", 11)
+	_, err = New("/notperm", 0, 11)
 	test.NotNil(err)
 
-	f, err := New(root, 10)
+	f, err := New(root, 0, 10)
 	test.Nil(err)
 
 	err = f.Delete(false)
@@ -46,7 +46,7 @@ func TestBlockException(t *testing.T) {
 func TestBlockWriteRead(t *testing.T) {
 	defer test.New(t)
 
-	f, err := New(root, 4)
+	f, err := New(root, 0, 4)
 	test.Nil(err)
 	defer f.Close()
 
@@ -68,7 +68,7 @@ func TestBlockWriteRead(t *testing.T) {
 func TestBlock(t *testing.T) {
 	defer test.New(t)
 
-	f, err := New(root, 2)
+	f, err := New(root, 0, 2)
 	test.Nil(err)
 	test.Nil(f.Delete(false))
 	defer f.Close()

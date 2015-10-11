@@ -14,6 +14,9 @@ deps:
 test: deps
 	go test -v $(PKG)/fsmq/...
 
+testone:
+	go test -v github.com/chzyer/fsmq/fsmq/$(pkg)
+
 clean:
 	go clean ./...
 	rm -fr bin deps/pkg
