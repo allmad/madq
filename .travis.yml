@@ -11,4 +11,4 @@ before_install:
 script:
   - make cover
 after_success:
-  - bash -c "goveralls -service=travis-ci -coverprofile=fsmq/.cover.out | tee"
+  - bash -c "goveralls -covermode=set -service=travis-ci -coverprofile=fsmq/.cover.out | tee"
