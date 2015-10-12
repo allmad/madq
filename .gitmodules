@@ -7,3 +7,6 @@
 [submodule "deps/src/github.com/chzyer/gofsmq"]
 	path = deps/src/github.com/chzyer/gofsmq
 	url = https://github.com/chzyer/gofsmq
+[submodule "deps/src/github.com/klauspost/crc32"]
+	path = deps/src/github.com/klauspost/crc32
+	url = https://github.com/klauspost/crc32
