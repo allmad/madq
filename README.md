@@ -13,7 +13,7 @@ FsMQ stand for FileSystem as Message Queue
 ```{shell}
 $ go get github.com/chzyer/fsmq
 $ cd $GOPATH/src/github.com/chzyer/fsmq
-$ make # everything will done
+$ make # everything will be done
 $ bin/fsmq -h # execute fsmq now!
 ```
 
@@ -24,3 +24,7 @@ please set your `$GOPATH` or just execute `export GOPATH=$(pwd)` in shell.
 ## SDK
 
 * [gofsmq](https://github.com/chzyer/gofsmq)
+
+## Wiki
+
+* [LFS Implementation](https://github.com/chzyer/fsmq/wiki/LFS-implementation)
