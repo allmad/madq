@@ -67,7 +67,7 @@ func New(t Failer) {
 	if strings.HasPrefix(file, getMainRoot()) {
 		file = file[len(getMainRoot()):]
 	}
-	println(fmt.Sprintf("    %s:%d: %s", file, line, te.info))
+	println(fmt.Sprintf("%s:%d: %s", file, line, te.info))
 	t.FailNow()
 }
 
