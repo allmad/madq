@@ -10,3 +10,6 @@
 [submodule "deps/src/github.com/klauspost/crc32"]
 	path = deps/src/github.com/klauspost/crc32
 	url = https://github.com/klauspost/crc32
+[submodule "wiki"]
+	path = wiki
+	url = https://github.com/chzyer/fsmq.wiki.git
