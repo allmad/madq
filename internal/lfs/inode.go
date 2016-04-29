@@ -21,23 +21,6 @@ func (b BlockMeta) GetAddr() int64 {
 	return int64(b & Ones52)
 }
 
-// in reserved area
-type Inode struct {
-	Create        int64
-	End           int64
-	BlockMeta     [13]BlockMeta
-	IndirectBlock int64
-}
-
-// in data area
-type IndirectInode struct {
-	Magic         [4]byte
-	Create        int64
-	End           int32
-	BlockMeta     [13]BlockMeta
-	IndirectBlock int64
-}
-
 type IndirectBlock struct {
 	Magic [4]byte
 	Ino   int32
