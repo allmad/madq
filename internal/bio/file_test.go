@@ -1,4 +1,4 @@
-package blockio
+package bio
 
 import (
 	"bytes"
