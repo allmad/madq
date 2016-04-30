@@ -13,7 +13,8 @@ type Volume struct {
 	flow *flow.Flow
 
 	// reserved area
-	reservedArea ReservedArea
+	reservedArea  ReservedArea
+	rootDirectory *File
 
 	writeChan chan *writeReq
 }
@@ -35,9 +36,9 @@ func NewVolume(f *flow.Flow, dev bio.Device) (*Volume, error) {
 func (v *Volume) initReservedArea() error {
 	err := bio.ReadAt(v.dev, 0, &v.reservedArea)
 	if err != nil && logex.Equal(err, io.EOF) {
-		err = nil
+		err = logex.Trace(bio.WriteAt(v.dev, 0, &v.reservedArea))
 	}
-	return nil
+	return err
 }
 
 func (v *Volume) loop() {
@@ -55,12 +56,18 @@ loop:
 	}
 }
 
+func (v *Volume) getIno(name string) int {
+
+	return 0
+}
+
 func (v *Volume) write(w *writeReq) {
 
 }
 
 func (v *Volume) OpenFile(name string) (*File, error) {
-	return NewFile(v, name)
+	ino := v.getIno(name)
+	return NewFile(v, ino, name)
 }
 
 func (v *Volume) Close() {
@@ -74,6 +81,7 @@ func (v *Volume) Close() {
 // -----------------------------------------------------------------------------
 
 type writeReq struct {
+	Ino    int
 	Data   []byte
 	Offset int64
 	Reply  chan *writeResp

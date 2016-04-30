@@ -12,6 +12,7 @@ func TestVolume(t *testing.T) {
 	defer test.New(t)
 	blk, err := bio.NewFile(test.Root())
 	test.Nil(err)
+	blk.Delete(false)
 	f := flow.New()
 
 	vol, err := NewVolume(f, blk)

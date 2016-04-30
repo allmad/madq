@@ -2,13 +2,15 @@ package lfs
 
 type File struct {
 	name   string
+	ino    int
 	v      *Volume
 	offset int64
 }
 
-func NewFile(v *Volume, name string) (*File, error) {
+func NewFile(v *Volume, ino int, name string) (*File, error) {
 	fd := &File{
 		v:    v,
+		ino:  ino,
 		name: name,
 	}
 	return fd, nil

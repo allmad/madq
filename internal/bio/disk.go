@@ -1,6 +1,7 @@
 package bio
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 
@@ -8,6 +9,7 @@ import (
 )
 
 var (
+	ErrShortWrite       = logex.Define("short write")
 	ErrReaderBufferFull = logex.Define("reader buffer is full")
 	ErrWriterBufferFull = logex.Define("reader writer is full")
 )
@@ -45,6 +47,10 @@ func (w *Writer) Int32(n int32) {
 	return
 }
 
+func (w *Writer) Padding(n int) {
+	w.offset += n
+}
+
 func (w *Writer) Byte(b []byte) {
 	copy(w.data[w.offset:], b)
 	w.offset += len(b)
@@ -72,8 +78,26 @@ func ReadAt(r io.ReaderAt, offset int64, d Diskable) error {
 	return logex.Trace(d.ReadDisk(NewReader(blk)))
 }
 
+func WriteAt(w io.WriterAt, offset int64, d Diskable) error {
+	blk := make([]byte, d.Size())
+	d.WriteDisk(NewWriter(blk))
+	n, err := w.WriteAt(blk, offset)
+	if n != len(blk) {
+		return ErrShortWrite.Trace(n)
+	}
+	return logex.Trace(err)
+}
+
 func NewReader(data []byte) *Reader {
 	return &Reader{data: data}
+}
+
+func (r *Reader) Verify(b []byte) bool {
+	return bytes.Equal(r.Byte(len(b)), b)
+}
+
+func (r *Reader) Skip(n int) {
+	r.offset += n
 }
 
 func (r *Reader) Byte(n int) []byte {

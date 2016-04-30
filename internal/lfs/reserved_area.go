@@ -1,54 +1,25 @@
 package lfs
 
 import (
-	"bytes"
-
 	"github.com/chzyer/logex"
 	"github.com/chzyer/madq/internal/bio"
 )
 
-// 1 block
-type Superblock struct {
-	Version    int32
-	Checkpoint int64
-	padding    [BlockSize - 8 - 4]byte
-}
-
-func (*Superblock) Size() int {
-	return SuperblockSize
-}
-
-func (s *Superblock) ReadDisk(r *bio.Reader) error {
-	s.Version = r.Int32()
-	s.Checkpoint = r.Int64()
-	return nil
-}
-
-func (s *Superblock) WriteDisk(w *bio.Writer) {
-	w.Int32(s.Version)
-	w.Int64(s.Checkpoint)
-}
-
 // TODO(chzyer): add the size on Tables in testcase
 type ReservedArea struct {
 	Superblock         Superblock
-	InodeTable         [47 * 32]Inode
-	IndirectInodeTable [16 * 512]IndirectInodeAddr
+	IndirectInodeTable [127 * 512]Address
 }
 
 func NewReservedArea() ReservedArea {
-	return ReservedArea{}
+	ra := ReservedArea{}
+	ra.Superblock.Version = 1
+	return ra
 }
 
 func (r *ReservedArea) ReadDisk(reader *bio.Reader) error {
 	if err := reader.ReadDisk(&r.Superblock); err != nil {
 		return logex.Trace(err)
-	}
-
-	for i := 0; i < len(r.InodeTable); i++ {
-		if err := r.InodeTable[i].ReadDisk(reader); err != nil {
-			return logex.Trace(err)
-		}
 	}
 
 	for i := 0; i < len(r.IndirectInodeTable); i++ {
@@ -65,9 +36,6 @@ func (*ReservedArea) Size() int {
 
 func (r *ReservedArea) WriteDisk(w *bio.Writer) {
 	r.Superblock.WriteDisk(w)
-	for i := 0; i < len(r.InodeTable); i++ {
-		r.InodeTable[i].WriteDisk(w)
-	}
 	for i := 0; i < len(r.IndirectInodeTable); i++ {
 		r.IndirectInodeTable[i].WriteDisk(w)
 	}
@@ -75,95 +43,60 @@ func (r *ReservedArea) WriteDisk(w *bio.Writer) {
 
 // -----------------------------------------------------------------------------
 
-const InodeSize = 128
+const SuperblockSize = BlockSize
 
-type Inode struct {
-	Create        int64
-	End           int64
-	IndirectBlock int64
-	BlockMeta     [13]BlockMeta
+// 1 block
+type Superblock struct {
+	Version    int32
+	padding    [BlockSize - 12]byte
+	Checkpoint int64
 }
 
-func (*Inode) Size() int {
-	return InodeSize
+func (*Superblock) Size() int {
+	return SuperblockSize
 }
 
-func (n *Inode) ReadDisk(r *bio.Reader) error {
-	n.Create = r.Int64()
-	n.End = r.Int64()
-	n.IndirectBlock = r.Int64()
-	for i := 0; i < len(n.BlockMeta); i++ {
-		n.BlockMeta[i] = BlockMeta(r.Int64())
-	}
+func (s *Superblock) ReadDisk(r *bio.Reader) error {
+	s.Version = r.Int32()
+	s.Checkpoint = r.Int64()
 	return nil
 }
 
-func (n *Inode) WriteDisk(w *bio.Writer) {
-	w.Int64(n.Create)
-	w.Int64(n.End)
-	w.Int64(n.IndirectBlock)
-	for i := 0; i < len(n.BlockMeta); i++ {
-		w.Int64(int64(n.BlockMeta[i]))
-	}
+func (s *Superblock) WriteDisk(w *bio.Writer) {
+	w.Int32(s.Version)
+	w.Int64(s.Checkpoint)
+	w.Padding(len(s.padding))
 }
 
 // -----------------------------------------------------------------------------
 
-const IndirectInodeSize = 128
+type InodeTable struct {
+	Magic [4]byte
+	_     int32
 
-var (
-	IndirectInodeMagic  = []byte{0x8a, 0x9c, 0x0, 0x1}
-	ErrNotIndirectInode = logex.Define("not indirect inode")
-)
-
-const IndirectInodeTableSize = 8
-
-type IndirectInodeAddr int64
-
-func (i *IndirectInodeAddr) ReadDisk(r *bio.Reader) error {
-	*i = IndirectInodeAddr(r.Int64())
-	return nil
+	Address [511]Address
 }
 
-func (i IndirectInodeAddr) Size() int {
-	return 8
+func (i *InodeTable) Size() int {
+	return InodeTableSize
 }
 
-func (i IndirectInodeAddr) WriteDisk(w *bio.Writer) {
-	w.Int64(int64(i))
-}
-
-type IndirectInode struct {
-	Magic         [4]byte
-	End           int32
-	Create        int64
-	IndirectBlock int64
-	BlockMeta     [13]BlockMeta
-}
-
-func (n *IndirectInode) ReadDisk(r *bio.Reader) error {
-	if bytes.Equal(r.Byte(4), IndirectInodeMagic) {
-		return ErrNotIndirectInode.Trace()
+func (i *InodeTable) ReadDisk(r *bio.Reader) error {
+	if !r.Verify(InodeTableMagic) {
+		return ErrDecodeNotInodeTable
 	}
-	n.End = r.Int32()
-	n.Create = r.Int64()
-	n.IndirectBlock = r.Int64()
-	for i := 0; i < len(n.BlockMeta); i++ {
-		n.BlockMeta[i] = BlockMeta(r.Int64())
+	r.Skip(4)
+
+	for _, addr := range i.Address {
+		_ = addr.ReadDisk(r)
 	}
 	return nil
 }
 
-func (n *IndirectBlock) Size() int {
-	return IndirectInodeSize
-}
-
-func (n *IndirectInode) WriteDisk(w *bio.Writer) {
-	w.Byte(IndirectInodeMagic)
-	w.Int32(n.End)
-	w.Int64(n.Create)
-	w.Int64(n.IndirectBlock)
-	for i := 0; i < len(n.BlockMeta); i++ {
-		w.Int64(int64(n.BlockMeta[i]))
+func (i *InodeTable) WriteDisk(w *bio.Writer) {
+	w.Byte(InodeTableMagic)
+	w.Padding(4)
+	for _, addr := range i.Address {
+		addr.WriteDisk(w)
 	}
 }
