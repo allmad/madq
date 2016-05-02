@@ -9,6 +9,7 @@ import (
 )
 
 var (
+	ErrShortRead        = logex.Define("short read")
 	ErrShortWrite       = logex.Define("short write")
 	ErrReaderBufferFull = logex.Define("reader buffer is full")
 	ErrWriterBufferFull = logex.Define("reader writer is full")
@@ -86,6 +87,21 @@ func WriteAt(w io.WriterAt, offset int64, d Diskable) error {
 		return ErrShortWrite.Trace(n)
 	}
 	return logex.Trace(err)
+}
+
+func ReadDiskable(raw RawDisker, addr int64, disk Diskable) error {
+	ret := make([]byte, disk.Size())
+	n, err := raw.ReadAt(ret, addr)
+	if err != nil {
+		return logex.Trace(err)
+	}
+	if n != len(ret) {
+		return ErrShortRead.Trace()
+	}
+	if err := disk.ReadDisk(NewReader(ret)); err != nil {
+		return logex.Trace(err)
+	}
+	return nil
 }
 
 func NewReader(data []byte) *Reader {

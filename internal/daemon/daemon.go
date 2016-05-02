@@ -1,11 +1,16 @@
 package daemon
 
-import "github.com/chzyer/flow"
+import (
+	"fmt"
+
+	"github.com/chzyer/flow"
+)
 
 type Config struct {
 	BaseDir string
 }
 
 func (c *Config) FlaglyHandle(f *flow.Flow) {
-	println(f)
+	println("starting daemon")
+	f.Error(fmt.Errorf("something went wrong"))
 }

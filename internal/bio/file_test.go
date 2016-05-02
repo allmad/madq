@@ -9,7 +9,7 @@ import (
 	"github.com/chzyer/test"
 )
 
-var _ Device = new(File)
+var _ RawDisker = new(File)
 
 func TestFileException(t *testing.T) {
 	defer test.New(t)

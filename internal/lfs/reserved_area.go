@@ -5,16 +5,28 @@ import (
 	"github.com/chzyer/madq/internal/bio"
 )
 
+const (
+	InodeTableCap = 15
+	MaxInodeSize  = 127 * 512 * InodeTableCap
+)
+
 // TODO(chzyer): add the size on Tables in testcase
 type ReservedArea struct {
 	Superblock         Superblock
-	IndirectInodeTable [127 * 512]Address
+	IndirectInodeTable [MaxInodeSize / InodeTableCap]Address
 }
 
 func NewReservedArea() ReservedArea {
 	ra := ReservedArea{}
 	ra.Superblock.Version = 1
 	return ra
+}
+
+// get the index of IndirectInodeTable and InodeTable
+func (r *ReservedArea) GetIdx(ino int) (idxL1, idxL2 int) {
+	idxL1 = ino / 15 // 15 => number of Inode in InodeTable
+	idxL2 = ino % 15
+	return
 }
 
 func (r *ReservedArea) ReadDisk(reader *bio.Reader) error {
@@ -48,6 +60,7 @@ const SuperblockSize = BlockSize
 // 1 block
 type Superblock struct {
 	Version    int32
+	InodeCnt   int32
 	padding    [BlockSize - 12]byte
 	Checkpoint int64
 }
@@ -58,12 +71,14 @@ func (*Superblock) Size() int {
 
 func (s *Superblock) ReadDisk(r *bio.Reader) error {
 	s.Version = r.Int32()
+	s.InodeCnt = r.Int32()
 	s.Checkpoint = r.Int64()
 	return nil
 }
 
 func (s *Superblock) WriteDisk(w *bio.Writer) {
 	w.Int32(s.Version)
+	w.Int32(s.InodeCnt)
 	w.Int64(s.Checkpoint)
 	w.Padding(len(s.padding))
 }
@@ -74,7 +89,7 @@ type InodeTable struct {
 	Magic [4]byte
 	_     int32
 
-	Address [511]Address
+	Address [15]Address
 }
 
 func (i *InodeTable) Size() int {

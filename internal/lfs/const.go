@@ -87,6 +87,10 @@ func (n *Inode) WriteDisk(w *bio.Writer) {
 
 type BlockMeta int64
 
+func (b BlockMeta) IsEmpty() bool {
+	return b == 0
+}
+
 func (b *BlockMeta) SetPadding(n int16) {
 	set := BlockMeta(n & 0xFFF) // 12 bit
 	*b = *b & Ones52            // 52 bit
@@ -111,6 +115,14 @@ func (b BlockMeta) GetAddr() int64 {
 const AddressSize = 8
 
 type Address int64
+
+func (i Address) Valid() bool {
+	return i != 0
+}
+
+func (i Address) ReadAddr(raw bio.RawDisker, b []byte) (int, error) {
+	return raw.ReadAt(b, int64(i))
+}
 
 func (i *Address) ReadDisk(r *bio.Reader) error {
 	*i = Address(r.Int64())

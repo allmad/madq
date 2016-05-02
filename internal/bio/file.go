@@ -1,6 +1,7 @@
 package bio
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -65,7 +66,7 @@ func (f *File) Close() error {
 	return nil
 }
 
-func (f *File) getChunk(off int64) (int64, *chunkctx, error) {
+func (f *File) getChunk(off int64, writeOp bool) (int64, *chunkctx, error) {
 	if off < 0 {
 		return -1, nil, ErrFileInvalidOffset.Trace()
 	}
@@ -81,7 +82,7 @@ func (f *File) getChunk(off int64) (int64, *chunkctx, error) {
 		return chunkIdx, chunk, nil
 	}
 
-	newChunk, err := newChunkctx(f.root, chunkIdx)
+	newChunk, err := newChunkctx(f.root, chunkIdx, writeOp)
 	if err != nil {
 		f.m.Unlock()
 		return chunkIdx, nil, logex.Trace(err)
@@ -101,7 +102,7 @@ func (f *File) WriteAt(b []byte, off int64) (n int, err error) {
 		return 0, ErrFileClosed.Trace()
 	}
 
-	chunkIdx, chunk, err := f.getChunk(off)
+	chunkIdx, chunk, err := f.getChunk(off, false)
 	if err != nil {
 		return 0, logex.Trace(err)
 	}
@@ -136,7 +137,7 @@ func (f *File) ReadAt(b []byte, off int64) (n int, err error) {
 	if atomic.LoadInt32(&f.closed) != 0 {
 		return 0, ErrFileClosed.Trace()
 	}
-	chunkIdx, chunk, err := f.getChunk(off)
+	chunkIdx, chunk, err := f.getChunk(off, false)
 	if err != nil {
 		return 0, logex.Trace(err)
 	}
@@ -187,10 +188,17 @@ type chunkctx struct {
 	ref int32
 }
 
-func newChunkctx(base string, idx int64) (*chunkctx, error) {
+func newChunkctx(base string, idx int64, writeOp bool) (*chunkctx, error) {
 	fp := filepath.Join(base, strconv.FormatInt(idx, 36))
-	fd, err := os.OpenFile(fp, os.O_CREATE|os.O_RDWR, 0600)
+	oflag := os.O_RDWR
+	if writeOp {
+		oflag |= os.O_CREATE
+	}
+	fd, err := os.OpenFile(fp, oflag, 0600)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, logex.Trace(io.EOF)
+		}
 		return nil, logex.Trace(err)
 	}
 	ctx := &chunkctx{

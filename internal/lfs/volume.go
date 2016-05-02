@@ -1,44 +1,51 @@
 package lfs
 
 import (
-	"io"
-
 	"github.com/chzyer/flow"
 	"github.com/chzyer/logex"
 	"github.com/chzyer/madq/internal/bio"
 )
 
+var (
+	ErrVolumeFileNotExists = logex.Define("file is not exists")
+)
+
 type Volume struct {
-	dev  bio.Device
+	raw bio.RawDisker
+
 	flow *flow.Flow
 
-	// reserved area
-	reservedArea  ReservedArea
-	rootDirectory *File
+	inodeMgr *InodeMgr
+	rootDir  RootDir
+
+	buffer []byte
 
 	writeChan chan *writeReq
 }
 
-func NewVolume(f *flow.Flow, dev bio.Device) (*Volume, error) {
+func NewVolume(f *flow.Flow, raw bio.RawDisker) (*Volume, error) {
 	vol := &Volume{
-		dev:          dev,
-		reservedArea: NewReservedArea(),
-		writeChan:    make(chan *writeReq, 2),
+		raw:       raw,
+		inodeMgr:  NewInodeMgr(raw),
+		writeChan: make(chan *writeReq, 2),
 	}
-	if err := vol.initReservedArea(); err != nil {
+
+	if err := vol.init(); err != nil {
 		return nil, logex.Trace(err)
 	}
+
 	f.ForkTo(&vol.flow, vol.Close)
 	go vol.loop()
 	return vol, nil
 }
 
-func (v *Volume) initReservedArea() error {
-	err := bio.ReadAt(v.dev, 0, &v.reservedArea)
-	if err != nil && logex.Equal(err, io.EOF) {
-		err = logex.Trace(bio.WriteAt(v.dev, 0, &v.reservedArea))
+func (v *Volume) init() error {
+	rootDir, err := NewRootDir(v)
+	if err != nil {
+		return logex.Trace(err)
 	}
-	return err
+	v.rootDir = *rootDir
+	return nil
 }
 
 func (v *Volume) loop() {
@@ -56,17 +63,30 @@ loop:
 	}
 }
 
-func (v *Volume) getIno(name string) int {
-
-	return 0
+func (v *Volume) getInoByName(name string) (int, bool) {
+	if name == "/" {
+		return 0, true
+	}
+	println("name")
+	return -1, false
 }
 
 func (v *Volume) write(w *writeReq) {
 
 }
 
-func (v *Volume) OpenFile(name string) (*File, error) {
-	ino := v.getIno(name)
+func (v *Volume) rawWrite(b []byte, offset int64) (int, error) {
+	return v.raw.WriteAt(b, offset)
+}
+
+func (v *Volume) OpenFile(name string, autoCreate bool) (*File, error) {
+	ino, exists := v.getInoByName(name)
+	if !autoCreate && !exists {
+		return nil, ErrVolumeFileNotExists.Trace()
+	}
+	if !exists {
+
+	}
 	return NewFile(v, ino, name)
 }
 
