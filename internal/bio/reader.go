@@ -15,53 +15,6 @@ var (
 	ErrWriterBufferFull = logex.Define("reader writer is full")
 )
 
-type Diskable interface {
-	Size() int
-	ReadDisk(r *Reader) error
-	WriteDisk(w *Writer)
-}
-
-type Writer struct {
-	data   []byte
-	offset int
-}
-
-func NewWriter(data []byte) *Writer {
-	return &Writer{data: data}
-}
-
-func (w *Writer) Available() int {
-	return len(w.data) - w.offset
-}
-
-func (w *Writer) WriteDisk(d Diskable) error {
-	if w.Available() < d.Size() {
-		return ErrWriterBufferFull.Trace()
-	}
-	d.WriteDisk(w)
-	return nil
-}
-
-func (w *Writer) Int32(n int32) {
-	binary.BigEndian.PutUint32(w.data[w.offset:], uint32(n))
-	w.offset += 4
-	return
-}
-
-func (w *Writer) Padding(n int) {
-	w.offset += n
-}
-
-func (w *Writer) Byte(b []byte) {
-	copy(w.data[w.offset:], b)
-	w.offset += len(b)
-}
-
-func (w *Writer) Int64(n int64) {
-	binary.BigEndian.PutUint64(w.data[w.offset:], uint64(n))
-	w.offset += 8
-}
-
 type Reader struct {
 	data   []byte
 	offset int

@@ -51,7 +51,7 @@ type Inode struct {
 	BlockMeta [11]BlockMeta
 }
 
-func (n *Inode) ReadDisk(r *bio.Reader) error {
+func (n *Inode) ReadDisk(r bio.DiskReader) error {
 	if r.Verify(InodeMagic) {
 		return ErrDecodeNotInode.Trace()
 	}
@@ -71,7 +71,7 @@ func (n *Inode) Size() int {
 	return InodeSize
 }
 
-func (n *Inode) WriteDisk(w *bio.Writer) {
+func (n *Inode) WriteDisk(w bio.DiskWriter) {
 	w.Byte(InodeMagic)
 	w.Int32(n.Ino)
 	w.Int64(n.Start)
@@ -128,7 +128,7 @@ func (i Address) ReadAddr(raw bio.RawDisker, b []byte) (int, error) {
 	return raw.ReadAt(b, int64(i))
 }
 
-func (i *Address) ReadDisk(r *bio.Reader) error {
+func (i *Address) ReadDisk(r bio.DiskReader) error {
 	*i = Address(r.Int64())
 	return nil
 }
@@ -137,6 +137,6 @@ func (i Address) Size() int {
 	return AddressSize
 }
 
-func (i Address) WriteDisk(w *bio.Writer) {
+func (i Address) WriteDisk(w bio.DiskWriter) {
 	w.Int64(int64(i))
 }

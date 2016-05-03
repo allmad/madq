@@ -33,7 +33,7 @@ func (r *ReservedArea) GetIdx(ino int) (idxL1, idxL2 int) {
 	return
 }
 
-func (r *ReservedArea) ReadDisk(reader *bio.Reader) error {
+func (r *ReservedArea) ReadDisk(reader bio.DiskReader) error {
 	if err := reader.ReadDisk(&r.Superblock); err != nil {
 		return logex.Trace(err)
 	}
@@ -50,7 +50,7 @@ func (*ReservedArea) Size() int {
 	return ReservedAreaSize
 }
 
-func (r *ReservedArea) WriteDisk(w *bio.Writer) {
+func (r *ReservedArea) WriteDisk(w bio.DiskWriter) {
 	r.Superblock.WriteDisk(w)
 	for i := 0; i < len(r.IndirectInodeTable); i++ {
 		r.IndirectInodeTable[i].WriteDisk(w)
@@ -73,18 +73,18 @@ func (*Superblock) Size() int {
 	return SuperblockSize
 }
 
-func (s *Superblock) ReadDisk(r *bio.Reader) error {
+func (s *Superblock) ReadDisk(r bio.DiskReader) error {
 	s.Version = r.Int32()
 	s.InodeCnt = r.Int32()
 	s.Checkpoint = r.Int64()
 	return nil
 }
 
-func (s *Superblock) WriteDisk(w *bio.Writer) {
+func (s *Superblock) WriteDisk(w bio.DiskWriter) {
 	w.Int32(s.Version)
 	w.Int32(s.InodeCnt)
 	w.Int64(s.Checkpoint)
-	w.Padding(len(s.padding))
+	w.Skip(len(s.padding))
 }
 
 // -----------------------------------------------------------------------------
@@ -97,8 +97,8 @@ type InodeTable struct {
 }
 
 func (i *InodeTable) FindAvailable() int {
-	for idx, addr := range *i.Address {
-		if !addr.IsValid() {
+	for idx, addr := range i.Address {
+		if !addr.Valid() {
 			return idx
 		}
 	}
@@ -109,7 +109,7 @@ func (i *InodeTable) Size() int {
 	return InodeTableSize
 }
 
-func (i *InodeTable) ReadDisk(r *bio.Reader) error {
+func (i *InodeTable) ReadDisk(r bio.DiskReader) error {
 	if !r.Verify(InodeTableMagic) {
 		return ErrDecodeNotInodeTable
 	}
@@ -121,9 +121,9 @@ func (i *InodeTable) ReadDisk(r *bio.Reader) error {
 	return nil
 }
 
-func (i *InodeTable) WriteDisk(w *bio.Writer) {
+func (i *InodeTable) WriteDisk(w bio.DiskWriter) {
 	w.Byte(InodeTableMagic)
-	w.Padding(4)
+	w.Skip(4)
 	for _, addr := range i.Address {
 		addr.WriteDisk(w)
 	}
