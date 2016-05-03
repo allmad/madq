@@ -17,7 +17,7 @@ type Volume struct {
 	dev *bio.Device
 
 	// point to the end of data written
-	pointer int64
+	pointer *int64
 
 	flow *flow.Flow
 
@@ -48,7 +48,9 @@ func (v *Volume) init() error {
 		return logex.Trace(err)
 	}
 	v.pointer = v.inodeMgr.GetPointer()
-	v.dev = bio.NewDevice(v.raw, v.pointer)
+	v.dev = bio.NewDevice(v.raw, atomic.LoadInt64(v.pointer), func(d *bio.Device) {
+		atomic.StoreInt64(v.pointer, d.Offset())
+	})
 	v.inodeMgr.Start(v.dev)
 
 	rootDir, err := NewRootDir(v)
@@ -126,9 +128,5 @@ type writeResp struct {
 // InodeMgr Delegate -----------------------------------------------------------
 
 func (v *Volume) Malloc(n int) (start int64) {
-	return atomic.AddInt64(&v.pointer, int64(n)) - int64(n)
-}
-
-func (v *Volume) MallocWriter(n int) *bio.Writer {
-	return v.dev.GetWriter(v.Malloc(n), n)
+	return atomic.AddInt64(v.pointer, int64(n)) - int64(n)
 }

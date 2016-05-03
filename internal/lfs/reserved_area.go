@@ -16,9 +16,9 @@ type ReservedArea struct {
 	IndirectInodeTable [MaxInodeSize / InodeTableCap]Address
 }
 
-func NewReservedArea() ReservedArea {
-	ra := ReservedArea{}
-	ra.Superblock.Version = 1
+func NewReservedArea() *ReservedArea {
+	ra := &ReservedArea{}
+	ra.Superblock.Init()
 	return ra
 }
 
@@ -27,9 +27,9 @@ func (r *ReservedArea) GetInoStartByIndirInodeTbl(i int) int {
 }
 
 // get the index of IndirectInodeTable and InodeTable
-func (r *ReservedArea) GetIdx(ino int) (idxL1, idxL2 int) {
-	idxL1 = ino / 15 // 15 => number of Inode in InodeTable
-	idxL2 = ino % 15
+func (r *ReservedArea) GetIdx(ino int32) (idxL1, idxL2 int) {
+	idxL1 = int(ino / 15) // 15 => number of Inode in InodeTable
+	idxL2 = int(ino % 15)
 	return
 }
 
@@ -65,8 +65,13 @@ const SuperblockSize = BlockSize
 type Superblock struct {
 	Version    int32
 	InodeCnt   int32
-	padding    [BlockSize - 12]byte
+	padding    [BlockSize - 16]byte
 	Checkpoint int64
+}
+
+func (s *Superblock) Init() {
+	s.Version = 1
+	s.InodeCnt = 1 // Root Inode
 }
 
 func (*Superblock) Size() int {
@@ -77,6 +82,7 @@ func (s *Superblock) ReadDisk(r bio.DiskReader) error {
 	s.Version = r.Int32()
 	s.InodeCnt = r.Int32()
 	s.Checkpoint = r.Int64()
+	r.Skip(len(s.padding))
 	return nil
 }
 
@@ -111,12 +117,13 @@ func (i *InodeTable) Size() int {
 
 func (i *InodeTable) ReadDisk(r bio.DiskReader) error {
 	if !r.Verify(InodeTableMagic) {
-		return ErrDecodeNotInodeTable
+		r.Skip(-len(InodeTableMagic))
+		return ErrDecodeNotInodeTable.Trace(r.Byte(len(InodeTableMagic)))
 	}
 	r.Skip(4)
 
-	for _, addr := range i.Address {
-		_ = addr.ReadDisk(r)
+	for idx := range i.Address {
+		_ = i.Address[idx].ReadDisk(r)
 	}
 	return nil
 }

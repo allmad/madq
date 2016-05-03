@@ -10,7 +10,9 @@ import (
 )
 
 var (
-	ErrInodeMgrNotStarted = logex.Define("not started")
+	ErrAddressNotValid       = logex.Define("address is not valid")
+	ErrInodeMgrNotStarted    = logex.Define("not started")
+	ErrInodeMgrInodeNotFound = logex.Define("inode is not found")
 )
 
 type InodeMgrState int32
@@ -37,7 +39,7 @@ type InodeMgrDelegate interface {
 type InodeMgr struct {
 	state        InodeMgrState
 	delegate     InodeMgrDelegate
-	reservedArea ReservedArea
+	reservedArea *ReservedArea
 
 	// addr => Inode
 	inodeMap map[Address]*Inode
@@ -51,6 +53,7 @@ type InodeMgr struct {
 func NewInodeMgr(delegate InodeMgrDelegate) *InodeMgr {
 	im := &InodeMgr{
 		delegate:      delegate,
+		reservedArea:  NewReservedArea(),
 		inodeMap:      make(map[Address]*Inode),
 		inodeTableMap: make(map[Address]*InodeTable),
 	}
@@ -73,32 +76,54 @@ func (i *InodeMgr) Start(dev *bio.Device) {
 }
 
 // must Init first,
-func (i *InodeMgr) GetPointer() int64 {
-	return i.reservedArea.Superblock.Checkpoint
+func (i *InodeMgr) GetPointer() *int64 {
+	return &i.reservedArea.Superblock.Checkpoint
 }
 
 func (i *InodeMgr) Init(raw bio.RawDisker) error {
-	err := bio.ReadAt(raw, 0, &i.reservedArea)
+	err := bio.ReadAt(raw, 0, i.reservedArea)
 	if err != nil && logex.Equal(err, io.EOF) {
-		err = logex.Trace(bio.WriteAt(raw, 0, &i.reservedArea))
+		err = nil
 	}
 	return err
 }
 
-func (i *InodeMgr) GetInode(ino int) (*Inode, error) {
+func (i *InodeMgr) GetInode(ino int32) (*Inode, error) {
 	l1, l2 := i.reservedArea.GetIdx(ino)
-	it, err := i.GetInodeTable(i.reservedArea.IndirectInodeTable[l1])
+	tableAddr := i.reservedArea.IndirectInodeTable[l1]
+	if !tableAddr.Valid() {
+		return nil, ErrInodeMgrInodeNotFound.Trace()
+	}
+	it, err := i.GetInodeTable(tableAddr)
 	if err != nil {
 		return nil, err
 	}
-	inode, err := i.GetInodeByAddr(it.Address[l2])
+
+	inodeAddr := it.Address[l2]
+	if !inodeAddr.Valid() {
+		return nil, ErrInodeMgrInodeNotFound.Trace()
+	}
+	inode, err := i.GetInodeByAddr(inodeAddr)
 	if err != nil {
 		return nil, err
 	}
 	return inode, nil
 }
 
+func (i *InodeMgr) Flush() error {
+	err := bio.WriteAt(i.dev.Raw(), 0, i.reservedArea)
+	if err != nil {
+		return logex.Trace(err)
+	}
+	return logex.Trace(i.dev.Flush())
+}
+
+// get inode table from cache or disk
 func (i *InodeMgr) GetInodeTable(addr Address) (*InodeTable, error) {
+	if !addr.Valid() {
+		return nil, ErrAddressNotValid.Trace()
+	}
+
 	it, ok := i.inodeTableMap[addr]
 	if ok {
 		return it, nil
@@ -108,16 +133,22 @@ func (i *InodeMgr) GetInodeTable(addr Address) (*InodeTable, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	// read from disk
 	it = new(InodeTable)
 	if err := bio.ReadDiskable(dev, int64(addr), it); err != nil {
 		return nil, logex.Trace(err)
 	}
+	i.inodeTableMap[addr] = it
 	return it, nil
 }
 
 // make sure addr is Valid()
 func (i *InodeMgr) GetInodeByAddr(addr Address) (*Inode, error) {
+	if !addr.Valid() {
+		return nil, ErrAddressNotValid.Trace()
+	}
+
 	inode, ok := i.inodeMap[addr]
 	if ok {
 		return inode, nil
@@ -125,13 +156,48 @@ func (i *InodeMgr) GetInodeByAddr(addr Address) (*Inode, error) {
 
 	dev, err := i.getDev()
 	if err != nil {
-		return nil, err
+		return nil, logex.Trace(err)
 	}
 	inode = new(Inode)
 	if err := bio.ReadDiskable(dev, int64(addr), inode); err != nil {
 		return nil, logex.Trace(err)
 	}
+	i.inodeMap[addr] = inode
 	return inode, nil
+}
+
+func (i *InodeMgr) InodeCount() int {
+	return int(i.reservedArea.Superblock.InodeCnt)
+}
+
+func (i *InodeMgr) deleteInode(ino int32) error {
+	dev, err := i.getDev()
+	if err != nil {
+		return logex.Trace(err)
+	}
+
+	i.reservedArea.Superblock.InodeCnt--
+	l1, l2 := i.reservedArea.GetIdx(ino)
+	inodeTableAddr := i.reservedArea.IndirectInodeTable[l1]
+	inodeTable, err := i.GetInodeTable(inodeTableAddr)
+	if err != nil {
+		return logex.Trace(err)
+	}
+
+	dev.DontFlush()
+
+	off := i.delegate.Malloc(InodeTableSize)
+	inodeAddr := inodeTable.Address[l2]
+	inodeTable.Address[l2] = 0
+	dev.WriteDisk(off, inodeTable)
+	i.reservedArea.IndirectInodeTable[l1] = Address(off)
+	delete(i.inodeMap, inodeAddr)
+	delete(i.inodeTableMap, inodeTableAddr)
+	i.inodeTableMap[Address(off)] = inodeTable
+
+	dev.LetFlush()
+
+	return nil
 }
 
 // alloc a new inode
@@ -140,6 +206,7 @@ func (i *InodeMgr) newInode() (*Inode, error) {
 	if err != nil {
 		return nil, logex.Trace(err)
 	}
+	dev.DontFlush()
 
 	size := i.reservedArea.Superblock.InodeCnt
 	i.reservedArea.Superblock.InodeCnt++
@@ -151,32 +218,32 @@ func (i *InodeMgr) newInode() (*Inode, error) {
 		Create: time.Now().UnixNano(),
 	}
 	offInode := i.delegate.Malloc(InodeSize)
-	inode.WriteDisk(dev.GetWriter(offInode, InodeSize))
+	dev.WriteDisk(offInode, inode)
 	i.inodeMap[Address(offInode)] = inode
 
-	l1, l2 := i.reservedArea.GetIdx(int(inode.Ino))
-	_ = l2
+	l1, l2 := i.reservedArea.GetIdx(inode.Ino)
 	addrInodeTable := i.reservedArea.IndirectInodeTable[l1]
 	inodeTable, _ := i.GetInodeTable(addrInodeTable)
-	if inodeTable == nil {
+	if inodeTable != nil {
+		inodeTable.Address[l2] = Address(offInode)
+		inodeTableOff := i.delegate.Malloc(InodeTableSize)
+		i.reservedArea.IndirectInodeTable[l1] = Address(inodeTableOff)
+		dev.WriteDisk(inodeTableOff, inodeTable)
+		i.inodeTableMap[Address(inodeTableOff)] = inodeTable
+		delete(i.inodeTableMap, Address(addrInodeTable))
+	} else {
 		// make a new inodeTable
 		inodeTable = new(InodeTable)
-		off := i.delegate.Malloc(InodeTableSize)
+		newAddrInodeTable := i.delegate.Malloc(InodeTableSize)
 		// set the first address to offset of Inode
-		inodeTable.Address[0] = Address(offInode)
-		addrInodeTable.Set(Address(off))
-		inodeTable.WriteDisk(dev.GetWriter(off, InodeTableSize))
-	} else {
-		// inode table is already exists
-		available := inodeTable.FindAvailable()
-		if available == -1 {
-			panic("could not happend")
-		}
-		inodeTable.Address[available] = Address(offInode)
-		// write to disk
-		// update indirect inode table
-		// delete in map
+		inodeTable.Address[l2] = Address(offInode)
+		addrInodeTable.Update(Address(newAddrInodeTable))
+		i.inodeTableMap[Address(newAddrInodeTable)] = inodeTable
+		dev.WriteDisk(newAddrInodeTable, inodeTable)
+		i.reservedArea.IndirectInodeTable[l1] = Address(newAddrInodeTable)
 	}
+
+	dev.LetFlush()
 
 	return inode, nil
 }

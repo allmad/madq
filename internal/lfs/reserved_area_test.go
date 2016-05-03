@@ -16,7 +16,7 @@ func TestReservedArea(t *testing.T) {
 	{ // check get idx
 		mm := [MaxInodeSize / InodeTableCap][InodeTableCap]bool{}
 		for i := 0; i < MaxInodeSize; i++ {
-			l1, l2 := ra.GetIdx(i)
+			l1, l2 := ra.GetIdx(int32(i))
 			mm[l1][l2] = true
 		}
 		for idxL1, mmm := range mm {

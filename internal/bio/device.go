@@ -1,8 +1,10 @@
 package bio
 
 import (
+	"errors"
 	"io"
 	"sync"
+	"sync/atomic"
 
 	"github.com/chzyer/logex"
 )
@@ -16,7 +18,9 @@ var (
 type Device struct {
 	raw RawDisker
 
-	mutex sync.Mutex
+	mutex     sync.Mutex
+	dontFlush int32
+	onflush   func(*Device)
 
 	// buffer
 	bufStart int64
@@ -24,12 +28,28 @@ type Device struct {
 	buf      [2 * (8 << 20)]byte
 }
 
-func NewDevice(raw RawDisker, offset int64) *Device {
+func NewDevice(raw RawDisker, offset int64, onflush func(*Device)) *Device {
 	bd := &Device{
 		raw:      raw,
 		bufStart: offset,
+		onflush:  onflush,
 	}
 	return bd
+}
+
+func (d *Device) Raw() RawDisker {
+	return d.raw
+}
+
+func (d *Device) Offset() int64 {
+	d.mutex.Lock()
+	ret := d.bufStart
+	d.mutex.Unlock()
+	return ret
+}
+
+func (d *Device) Bytes() []byte {
+	return d.buf[:d.bufOff]
 }
 
 func (d *Device) Buffered() int {
@@ -49,7 +69,11 @@ func (d *Device) ReadAt(b []byte, off int64) (int, error) {
 func (d *Device) readAtLocked(b []byte, off int64) (int, error) {
 	if off+int64(len(b)) <= d.bufStart {
 		// all we want is all on disk
-		return d.raw.ReadAt(b, off)
+		n, err := d.raw.ReadAt(b, off)
+		if err != nil {
+			err = logex.Trace(err)
+		}
+		return n, err
 	}
 
 	if off >= d.bufStart {
@@ -63,7 +87,7 @@ func (d *Device) readAtLocked(b []byte, off int64) (int, error) {
 			n = copy(b, d.buf[off:d.bufOff])
 		}
 		if n == 0 {
-			err = io.EOF
+			err = logex.Trace(io.EOF)
 		}
 		return n, err
 	}
@@ -72,12 +96,12 @@ func (d *Device) readAtLocked(b []byte, off int64) (int, error) {
 	sizeOnDisk := int(d.bufStart - off)
 	nDisk, err := d.raw.ReadAt(b[:sizeOnDisk], off)
 	if err != nil {
-		return nDisk, err
+		return nDisk, logex.Trace(err)
 	}
 
 	nMem := copy(b[sizeOnDisk:], d.buf[:d.bufOff])
 	if nMem+nDisk == 0 {
-		err = io.EOF
+		err = logex.Trace(io.EOF)
 	}
 	return nMem + nDisk, err
 }
@@ -118,9 +142,25 @@ func (d *Device) writeAtLocked(b []byte, off int) (int, error) {
 	return len(b), nil
 }
 
+func (d *Device) DontFlush() {
+	atomic.StoreInt32(&d.dontFlush, 1)
+}
+
+func (d *Device) LetFlush() {
+	atomic.StoreInt32(&d.dontFlush, 0)
+}
+
+func (d *Device) WriteDisk(off int64, disk Diskable) {
+	disk.WriteDisk(d.GetWriter(off, disk.Size()))
+}
+
+// TODO: add lock for writer
 func (d *Device) GetWriter(off int64, size int) *Writer {
 	d.mutex.Lock()
 	start := int(off - d.bufStart)
+	if start+size > d.bufOff {
+		d.bufOff = start + size
+	}
 	d.mutex.Unlock()
 	return NewWriter(d.buf[start : start+size])
 }
@@ -140,6 +180,10 @@ func (d *Device) WriteAt(b []byte, off int64) (int, error) {
 }
 
 func (d *Device) Flush() error {
+	if atomic.LoadInt32(&d.dontFlush) == 1 {
+		return errors.New("can't flush")
+	}
+
 	d.mutex.Lock()
 	if d.bufOff == 0 {
 		d.mutex.Unlock()
@@ -155,5 +199,8 @@ func (d *Device) Flush() error {
 	d.bufStart += int64(n)
 	d.bufOff = 0
 	d.mutex.Unlock()
+	if d.onflush != nil {
+		d.onflush(d)
+	}
 	return nil
 }

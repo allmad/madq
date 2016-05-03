@@ -37,7 +37,7 @@ func WriteAt(w io.WriterAt, offset int64, d Diskable) error {
 	d.WriteDisk(NewWriter(blk))
 	n, err := w.WriteAt(blk, offset)
 	if n != len(blk) {
-		return ErrShortWrite.Trace(n)
+		return ErrShortWrite.Trace(n, len(blk))
 	}
 	return logex.Trace(err)
 }
@@ -61,6 +61,10 @@ func NewReader(data []byte) *Reader {
 	return &Reader{data: data}
 }
 
+func (r *Reader) Offset() int {
+	return r.offset
+}
+
 func (r *Reader) Verify(b []byte) bool {
 	return bytes.Equal(r.Byte(len(b)), b)
 }
@@ -70,8 +74,8 @@ func (r *Reader) Skip(n int) {
 }
 
 func (r *Reader) Byte(n int) []byte {
-	ret := r.data[r.offset:r.offset:4]
-	r.offset += 4
+	ret := r.data[r.offset : r.offset+n]
+	r.offset += n
 	return ret
 }
 

@@ -42,6 +42,7 @@ func NewFileEx(root string, bit uint) (*File, error) {
 	if err := os.MkdirAll(root, 0744); err != nil {
 		return nil, logex.Trace(err)
 	}
+
 	root = filepath.Join(root)
 	file := &File{
 		root:      root,
@@ -102,7 +103,7 @@ func (f *File) WriteAt(b []byte, off int64) (n int, err error) {
 		return 0, ErrFileClosed.Trace()
 	}
 
-	chunkIdx, chunk, err := f.getChunk(off, false)
+	chunkIdx, chunk, err := f.getChunk(off, true)
 	if err != nil {
 		return 0, logex.Trace(err)
 	}

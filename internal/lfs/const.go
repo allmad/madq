@@ -24,7 +24,7 @@ const InodeTableSize = 128
 
 var (
 	InodeTableMagic        = []byte{0x8a, 0x9c, 0x0, 0x1}
-	ErrDecodeNotInodeTable = logex.Define("not inode")
+	ErrDecodeNotInodeTable = logex.Define("not inodeTable")
 )
 
 // -----------------------------------------------------------------------------
@@ -34,7 +34,7 @@ const InodeSize = 128
 
 var (
 	InodeMagic        = []byte{0x8a, 0x9c, 0x0, 0x2}
-	ErrDecodeNotInode = logex.Define("not indirect inode")
+	ErrDecodeNotInode = logex.Define("not inode")
 )
 
 // -----------------------------------------------------------------------------
@@ -52,8 +52,9 @@ type Inode struct {
 }
 
 func (n *Inode) ReadDisk(r bio.DiskReader) error {
-	if r.Verify(InodeMagic) {
-		return ErrDecodeNotInode.Trace()
+	if !r.Verify(InodeMagic) {
+		r.Skip(-len(InodeMagic))
+		return ErrDecodeNotInode.Trace(r.Byte(len(InodeMagic)))
 	}
 	n.Ino = r.Int32()
 
@@ -120,7 +121,7 @@ func (i Address) Valid() bool {
 	return i != 0
 }
 
-func (i *Address) Set(val Address) {
+func (i *Address) Update(val Address) {
 	*i = val
 }
 
