@@ -120,6 +120,10 @@ func (i Address) Valid() bool {
 	return i != 0
 }
 
+func (i *Address) Set(val Address) {
+	*i = val
+}
+
 func (i Address) ReadAddr(raw bio.RawDisker, b []byte) (int, error) {
 	return raw.ReadAt(b, int64(i))
 }

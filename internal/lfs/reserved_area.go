@@ -22,6 +22,10 @@ func NewReservedArea() ReservedArea {
 	return ra
 }
 
+func (r *ReservedArea) GetInoStartByIndirInodeTbl(i int) int {
+	return i * 15
+}
+
 // get the index of IndirectInodeTable and InodeTable
 func (r *ReservedArea) GetIdx(ino int) (idxL1, idxL2 int) {
 	idxL1 = ino / 15 // 15 => number of Inode in InodeTable
@@ -90,6 +94,15 @@ type InodeTable struct {
 	_     int32
 
 	Address [15]Address
+}
+
+func (i *InodeTable) FindAvailable() int {
+	for idx, addr := range *i.Address {
+		if !addr.IsValid() {
+			return idx
+		}
+	}
+	return -1
 }
 
 func (i *InodeTable) Size() int {

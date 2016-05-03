@@ -2,6 +2,7 @@ package lfs
 
 import (
 	"io"
+	"time"
 
 	"github.com/chzyer/logex"
 	"github.com/chzyer/madq/internal/bio"
@@ -29,9 +30,13 @@ func (i *InodeMgrState) After(val InodeMgrState) bool {
 	return ((*util.State)(i)).After(util.State(val))
 }
 
+type InodeMgrDelegate interface {
+	Malloc(n int) int64
+}
+
 type InodeMgr struct {
 	state        InodeMgrState
-	raw          bio.RawDisker
+	delegate     InodeMgrDelegate
 	reservedArea ReservedArea
 
 	// addr => Inode
@@ -43,9 +48,9 @@ type InodeMgr struct {
 	dev *bio.Device
 }
 
-func NewInodeMgr(raw bio.RawDisker) *InodeMgr {
+func NewInodeMgr(delegate InodeMgrDelegate) *InodeMgr {
 	im := &InodeMgr{
-		raw:           raw,
+		delegate:      delegate,
 		inodeMap:      make(map[Address]*Inode),
 		inodeTableMap: make(map[Address]*InodeTable),
 	}
@@ -63,14 +68,19 @@ func (i *InodeMgr) Start(dev *bio.Device) {
 	if !i.state.Set(InodeMgrStateStarting) {
 		return
 	}
-	defer i.state.Set(InodeMgrStateStarted)
 	i.dev = dev
+	i.state.Set(InodeMgrStateStarted)
 }
 
-func (i *InodeMgr) init() error {
-	err := bio.ReadAt(i.raw, 0, &i.reservedArea)
+// must Init first,
+func (i *InodeMgr) GetPointer() int64 {
+	return i.reservedArea.Superblock.Checkpoint
+}
+
+func (i *InodeMgr) Init(raw bio.RawDisker) error {
+	err := bio.ReadAt(raw, 0, &i.reservedArea)
 	if err != nil && logex.Equal(err, io.EOF) {
-		err = logex.Trace(bio.WriteAt(i.raw, 0, &i.reservedArea))
+		err = logex.Trace(bio.WriteAt(raw, 0, &i.reservedArea))
 	}
 	return err
 }
@@ -94,43 +104,79 @@ func (i *InodeMgr) GetInodeTable(addr Address) (*InodeTable, error) {
 		return it, nil
 	}
 
+	dev, err := i.getDev()
+	if err != nil {
+		return nil, err
+	}
 	// read from disk
 	it = new(InodeTable)
-	if err := bio.ReadDiskable(i.raw, int64(addr), it); err != nil {
+	if err := bio.ReadDiskable(dev, int64(addr), it); err != nil {
 		return nil, logex.Trace(err)
 	}
 	return it, nil
 }
 
 // make sure addr is Valid()
-func (im *InodeMgr) GetInodeByAddr(addr Address) (*Inode, error) {
-	i, ok := im.inodeMap[addr]
+func (i *InodeMgr) GetInodeByAddr(addr Address) (*Inode, error) {
+	inode, ok := i.inodeMap[addr]
 	if ok {
-		return i, nil
+		return inode, nil
 	}
 
-	inode := new(Inode)
-	if err := bio.ReadDiskable(im.raw, int64(addr), inode); err != nil {
+	dev, err := i.getDev()
+	if err != nil {
+		return nil, err
+	}
+	inode = new(Inode)
+	if err := bio.ReadDiskable(dev, int64(addr), inode); err != nil {
 		return nil, logex.Trace(err)
 	}
 	return inode, nil
 }
 
+// alloc a new inode
 func (i *InodeMgr) newInode() (*Inode, error) {
 	dev, err := i.getDev()
 	if err != nil {
 		return nil, logex.Trace(err)
 	}
-	_ = dev
-	inode := new(Inode)
+
 	size := i.reservedArea.Superblock.InodeCnt
 	i.reservedArea.Superblock.InodeCnt++
-	l1, l2 := i.reservedArea.GetIdx(int(size))
-	_ = l2
-	addrL1 := i.reservedArea.IndirectInodeTable[l1]
-	if !addrL1.Valid() {
-		// make a new inodeTable
 
+	inode := &Inode{
+		Ino:    size,
+		Start:  0,
+		End:    0,
+		Create: time.Now().UnixNano(),
 	}
+	offInode := i.delegate.Malloc(InodeSize)
+	inode.WriteDisk(dev.GetWriter(offInode, InodeSize))
+	i.inodeMap[Address(offInode)] = inode
+
+	l1, l2 := i.reservedArea.GetIdx(int(inode.Ino))
+	_ = l2
+	addrInodeTable := i.reservedArea.IndirectInodeTable[l1]
+	inodeTable, _ := i.GetInodeTable(addrInodeTable)
+	if inodeTable == nil {
+		// make a new inodeTable
+		inodeTable = new(InodeTable)
+		off := i.delegate.Malloc(InodeTableSize)
+		// set the first address to offset of Inode
+		inodeTable.Address[0] = Address(offInode)
+		addrInodeTable.Set(Address(off))
+		inodeTable.WriteDisk(dev.GetWriter(off, InodeTableSize))
+	} else {
+		// inode table is already exists
+		available := inodeTable.FindAvailable()
+		if available == -1 {
+			panic("could not happend")
+		}
+		inodeTable.Address[available] = Address(offInode)
+		// write to disk
+		// update indirect inode table
+		// delete in map
+	}
+
 	return inode, nil
 }

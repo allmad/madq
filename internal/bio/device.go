@@ -118,6 +118,13 @@ func (d *Device) writeAtLocked(b []byte, off int) (int, error) {
 	return len(b), nil
 }
 
+func (d *Device) GetWriter(off int64, size int) *Writer {
+	d.mutex.Lock()
+	start := int(off - d.bufStart)
+	d.mutex.Unlock()
+	return NewWriter(d.buf[start : start+size])
+}
+
 func (d *Device) WriteAt(b []byte, off int64) (int, error) {
 	d.mutex.Lock()
 	n, err := d.writeAtLocked(b, int(off-d.bufStart))
