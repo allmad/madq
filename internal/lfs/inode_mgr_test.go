@@ -23,7 +23,7 @@ func TestInodeMgr(t *testing.T) {
 	block, err := bio.NewFile(test.Root())
 	test.Nil(err)
 
-	offset := int64(256)
+	offset := int64(ReservedAreaSize)
 	delegate := &inodeMgrDumpDelegate{offset}
 	im := NewInodeMgr(delegate)
 
@@ -33,9 +33,8 @@ func TestInodeMgr(t *testing.T) {
 	}
 	ptr := im.GetPointer()
 
-	im.Start(bio.NewDevice(block, delegate.pointer, func(d *bio.Device) {
-		atomic.StoreInt64(ptr, d.Offset())
-	}))
+	dev := bio.NewDevice(block, ptr)
+	im.Start(dev)
 
 	{
 		inode, err := im.newInode()
@@ -55,14 +54,15 @@ func TestInodeMgr(t *testing.T) {
 		inode, err := im.newInode()
 		test.Nil(err)
 		test.Equal(inode.Ino, 1)
-		test.Nil(im.Flush())
+		{ // save position, and flush
+			test.Nil(im.Flush())
+		}
+
 		im := NewInodeMgr(delegate)
 		{
 			err := im.Init(block)
 			test.Nil(err)
-			im.Start(bio.NewDevice(block, atomic.LoadInt64(ptr), func(d *bio.Device) {
-				atomic.StoreInt64(im.GetPointer(), d.Offset())
-			}))
+			im.Start(bio.NewDevice(block, ptr))
 		}
 		inode2, err := im.GetInode(inode.Ino)
 		test.Nil(err)

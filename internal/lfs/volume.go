@@ -47,10 +47,9 @@ func (v *Volume) init() error {
 	if err := v.inodeMgr.Init(v.raw); err != nil {
 		return logex.Trace(err)
 	}
+	// pointer 应该是实时更新的！但是写入不是实时写入
 	v.pointer = v.inodeMgr.GetPointer()
-	v.dev = bio.NewDevice(v.raw, atomic.LoadInt64(v.pointer), func(d *bio.Device) {
-		atomic.StoreInt64(v.pointer, d.Offset())
-	})
+	v.dev = bio.NewDevice(v.raw, v.pointer)
 	v.inodeMgr.Start(v.dev)
 
 	rootDir, err := NewRootDir(v)

@@ -72,6 +72,7 @@ type Superblock struct {
 func (s *Superblock) Init() {
 	s.Version = 1
 	s.InodeCnt = 1 // Root Inode
+	s.Checkpoint = ReservedAreaSize
 }
 
 func (*Superblock) Size() int {

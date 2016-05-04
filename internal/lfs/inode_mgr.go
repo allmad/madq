@@ -111,11 +111,16 @@ func (i *InodeMgr) GetInode(ino int32) (*Inode, error) {
 }
 
 func (i *InodeMgr) Flush() error {
+	if err := i.dev.Flush(); err != nil {
+		return logex.Trace(err)
+	}
+
+	// sync reservice area
 	err := bio.WriteAt(i.dev.Raw(), 0, i.reservedArea)
 	if err != nil {
 		return logex.Trace(err)
 	}
-	return logex.Trace(i.dev.Flush())
+	return nil
 }
 
 // get inode table from cache or disk

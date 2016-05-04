@@ -20,7 +20,8 @@ type Device struct {
 
 	mutex     sync.Mutex
 	dontFlush int32
-	onflush   func(*Device)
+
+	offsetPtr *int64
 
 	// buffer
 	bufStart int64
@@ -28,17 +29,24 @@ type Device struct {
 	buf      [2 * (8 << 20)]byte
 }
 
-func NewDevice(raw RawDisker, offset int64, onflush func(*Device)) *Device {
+func NewDevice(raw RawDisker, offset *int64) *Device {
 	bd := &Device{
-		raw:      raw,
-		bufStart: offset,
-		onflush:  onflush,
+		raw:       raw,
+		offsetPtr: offset,
+		bufStart:  atomic.LoadInt64(offset),
 	}
 	return bd
 }
 
 func (d *Device) Raw() RawDisker {
 	return d.raw
+}
+
+func (d *Device) Len() int64 {
+	d.mutex.Lock()
+	ret := d.bufStart + int64(d.bufOff)
+	d.mutex.Unlock()
+	return ret
 }
 
 func (d *Device) Offset() int64 {
@@ -197,10 +205,9 @@ func (d *Device) Flush() error {
 	}
 
 	d.bufStart += int64(n)
+	// sync offset
+	atomic.StoreInt64(d.offsetPtr, d.bufStart)
 	d.bufOff = 0
 	d.mutex.Unlock()
-	if d.onflush != nil {
-		d.onflush(d)
-	}
 	return nil
 }
