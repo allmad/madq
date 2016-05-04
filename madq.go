@@ -4,7 +4,7 @@ import (
 	"github.com/chzyer/flagly"
 	"github.com/chzyer/flow"
 	"github.com/chzyer/logex"
-	"github.com/chzyer/madq/internal/daemon"
+	"github.com/chzyer/madq/daemon"
 )
 
 type Madq struct {
