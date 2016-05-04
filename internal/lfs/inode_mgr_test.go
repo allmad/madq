@@ -43,7 +43,7 @@ func TestInodeMgr(t *testing.T) {
 		inode2, err := im.GetInode(inode.Ino)
 		test.Nil(err)
 		test.Equal(inode, inode2)
-		err = im.deleteInode(inode.Ino)
+		err = im.removeInode(inode.Ino)
 		test.Nil(err)
 		inode3, err := im.GetInode(inode.Ino)
 		test.Nil(inode3)

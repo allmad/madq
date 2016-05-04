@@ -18,8 +18,8 @@ var (
 type Device struct {
 	raw RawDisker
 
-	mutex     sync.Mutex
-	dontFlush int32
+	mutex sync.Mutex
+	ref   int32
 
 	offsetPtr *int64
 
@@ -150,12 +150,12 @@ func (d *Device) writeAtLocked(b []byte, off int) (int, error) {
 	return len(b), nil
 }
 
-func (d *Device) DontFlush() {
-	atomic.StoreInt32(&d.dontFlush, 1)
+func (d *Device) Require() {
+	atomic.AddInt32(&d.ref, 1)
 }
 
-func (d *Device) LetFlush() {
-	atomic.StoreInt32(&d.dontFlush, 0)
+func (d *Device) Release() {
+	atomic.AddInt32(&d.ref, -1)
 }
 
 func (d *Device) WriteDisk(off int64, disk Diskable) {
@@ -188,7 +188,7 @@ func (d *Device) WriteAt(b []byte, off int64) (int, error) {
 }
 
 func (d *Device) Flush() error {
-	if atomic.LoadInt32(&d.dontFlush) == 1 {
+	if atomic.LoadInt32(&d.ref) > 0 {
 		return errors.New("can't flush")
 	}
 

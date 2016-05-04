@@ -9,7 +9,8 @@ import (
 )
 
 var (
-	ErrVolumeFileNotExists = logex.Define("file is not exists")
+	ErrVolumeFileNotExists     = logex.Define("file is not exists")
+	ErrVolumeFileAlreadyExists = logex.Define("file is already exists")
 )
 
 type Volume struct {
@@ -24,13 +25,13 @@ type Volume struct {
 	inodeMgr *InodeMgr
 	rootDir  RootDir
 
-	writeChan chan *writeReq
+	writeChan chan *WriteReq
 }
 
 func NewVolume(f *flow.Flow, raw bio.RawDisker) (*Volume, error) {
 	vol := &Volume{
 		raw:       raw,
-		writeChan: make(chan *writeReq, 2),
+		writeChan: make(chan *WriteReq, 2),
 	}
 
 	if err := vol.init(); err != nil {
@@ -68,36 +69,58 @@ loop:
 	for {
 		select {
 		case w := <-v.writeChan:
-			v.write(w)
+			n, err := v.write(w)
+			w.Reply <- &WriteResp{n, err}
 		case <-v.flow.IsClose():
 			break loop
 		}
 	}
 }
 
-func (v *Volume) getInoByName(name string) (int, bool) {
+func (v *Volume) getInoByName(name string) int32 {
 	if name == "/" {
-		return 0, true
+		return 0
 	}
-	println("name")
-	return -1, false
+	return v.rootDir.Find(name)
 }
 
-func (v *Volume) write(w *writeReq) {
-
+func (v *Volume) write(w *WriteReq) (int, error) {
+	inode, err := v.inodeMgr.GetInode(w.Ino)
+	if err != nil {
+		return 0, logex.Trace(err)
+	}
+	_ = inode
+	return -1, nil
 }
 
-func (v *Volume) rawWrite(b []byte, offset int64) (int, error) {
-	return v.raw.WriteAt(b, offset)
+func (v *Volume) createFile(name string) (ino int32, err error) {
+	if ino := v.rootDir.Find(name); ino >= 0 {
+		return -1, ErrVolumeFileAlreadyExists.Trace()
+	}
+	inode, err := v.inodeMgr.NewInode()
+	if err != nil {
+		return -1, err
+	}
+	if err := v.rootDir.Add(name, inode.Ino); err != nil {
+		v.inodeMgr.RemoveInode(inode.Ino)
+		return -1, err
+	}
+	return inode.Ino, nil
 }
 
 func (v *Volume) OpenFile(name string, autoCreate bool) (*File, error) {
-	ino, exists := v.getInoByName(name)
-	if !autoCreate && !exists {
+	var err error
+	ino := v.getInoByName(name)
+	if !autoCreate && ino < 0 {
 		return nil, ErrVolumeFileNotExists.Trace()
 	}
-	if !exists {
 
+	// now we need to create
+	if ino < 0 {
+		ino, err = v.createFile(name)
+		if err != nil {
+			return nil, logex.Trace(err)
+		}
 	}
 	return NewFile(v, ino, name)
 }
@@ -112,14 +135,14 @@ func (v *Volume) Close() {
 
 // -----------------------------------------------------------------------------
 
-type writeReq struct {
-	Ino    int
+type WriteReq struct {
+	Ino    int32
 	Data   []byte
 	Offset int64
-	Reply  chan *writeResp
+	Reply  chan *WriteResp
 }
 
-type writeResp struct {
+type WriteResp struct {
 	N   int
 	Err error
 }

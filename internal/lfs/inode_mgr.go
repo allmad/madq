@@ -175,7 +175,11 @@ func (i *InodeMgr) InodeCount() int {
 	return int(i.reservedArea.Superblock.InodeCnt)
 }
 
-func (i *InodeMgr) deleteInode(ino int32) error {
+func (i *InodeMgr) RemoveInode(ino int32) error {
+	return i.removeInode(ino)
+}
+
+func (i *InodeMgr) removeInode(ino int32) error {
 	dev, err := i.getDev()
 	if err != nil {
 		return logex.Trace(err)
@@ -189,7 +193,7 @@ func (i *InodeMgr) deleteInode(ino int32) error {
 		return logex.Trace(err)
 	}
 
-	dev.DontFlush()
+	dev.Require()
 
 	off := i.delegate.Malloc(InodeTableSize)
 	inodeAddr := inodeTable.Address[l2]
@@ -200,9 +204,13 @@ func (i *InodeMgr) deleteInode(ino int32) error {
 	delete(i.inodeTableMap, inodeTableAddr)
 	i.inodeTableMap[Address(off)] = inodeTable
 
-	dev.LetFlush()
+	dev.Release()
 
 	return nil
+}
+
+func (i *InodeMgr) NewInode() (*Inode, error) {
+	return i.newInode()
 }
 
 // alloc a new inode
@@ -211,7 +219,7 @@ func (i *InodeMgr) newInode() (*Inode, error) {
 	if err != nil {
 		return nil, logex.Trace(err)
 	}
-	dev.DontFlush()
+	dev.Require()
 
 	size := i.reservedArea.Superblock.InodeCnt
 	i.reservedArea.Superblock.InodeCnt++
@@ -248,7 +256,7 @@ func (i *InodeMgr) newInode() (*Inode, error) {
 		i.reservedArea.IndirectInodeTable[l1] = Address(newAddrInodeTable)
 	}
 
-	dev.LetFlush()
+	dev.Release()
 
 	return inode, nil
 }

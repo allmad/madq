@@ -21,4 +21,8 @@ func TestVolume(t *testing.T) {
 	test.Nil(err)
 	defer vol.Close()
 
+	{
+		_, err := vol.OpenFile("hello", false)
+		test.Equal(err, ErrVolumeFileNotExists)
+	}
 }
