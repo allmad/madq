@@ -17,9 +17,9 @@ type ReservedArea struct {
 }
 
 func NewReservedArea() *ReservedArea {
-	ra := &ReservedArea{}
+	ra := ReservedArea{}
 	ra.Superblock.Init()
-	return ra
+	return &ra
 }
 
 func (r *ReservedArea) GetInoStartByIndirInodeTbl(i int) int {
