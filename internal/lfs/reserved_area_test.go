@@ -11,7 +11,7 @@ func TestReservedArea(t *testing.T) {
 	defer test.New(t)
 
 	ra := NewReservedArea()
-	test.Equal(unsafe.Sizeof(ra), ra.Size())
+	test.Equal(unsafe.Sizeof(*ra), ra.Size())
 
 	{ // check get idx
 		mm := [MaxInodeSize / InodeTableCap][InodeTableCap]bool{}

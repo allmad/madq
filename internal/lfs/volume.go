@@ -1,8 +1,6 @@
 package lfs
 
 import (
-	"sync/atomic"
-
 	"github.com/chzyer/flow"
 	"github.com/chzyer/logex"
 	"github.com/chzyer/madq/internal/bio"
@@ -14,11 +12,9 @@ var (
 )
 
 type Volume struct {
-	raw bio.RawDisker
-	dev *bio.Device
-
-	// point to the end of data written
-	pointer *int64
+	raw    bio.RawDisker
+	dev    *bio.Device
+	devmgr *bio.DeviceMgr
 
 	flow *flow.Flow
 
@@ -30,6 +26,7 @@ type Volume struct {
 
 func NewVolume(f *flow.Flow, raw bio.RawDisker) (*Volume, error) {
 	vol := &Volume{
+		flow:      f.Fork(0),
 		raw:       raw,
 		writeChan: make(chan *WriteReq, 2),
 	}
@@ -38,20 +35,22 @@ func NewVolume(f *flow.Flow, raw bio.RawDisker) (*Volume, error) {
 		return nil, logex.Trace(err)
 	}
 
-	f.ForkTo(&vol.flow, vol.Close)
+	vol.flow.AddOnClose(vol.Close)
 	go vol.loop()
 	return vol, nil
 }
 
 func (v *Volume) init() error {
-	v.inodeMgr = NewInodeMgr(v)
+	v.inodeMgr = NewInodeMgr()
 	if err := v.inodeMgr.Init(v.raw); err != nil {
 		return logex.Trace(err)
 	}
-	// pointer 应该是实时更新的！但是写入不是实时写入
-	v.pointer = v.inodeMgr.GetPointer()
-	v.dev = bio.NewDevice(v.raw, v.pointer)
-	v.inodeMgr.Start(v.dev)
+
+	pointer := v.inodeMgr.GetPointer()
+	v.dev = bio.NewDevice(v.raw, *pointer)
+	v.devmgr = bio.NewDeviceMgr(v.flow, v.dev, pointer)
+
+	v.inodeMgr.Start(v.devmgr)
 
 	rootDir, err := NewRootDir(v)
 	if err != nil {
@@ -150,5 +149,5 @@ type WriteResp struct {
 // InodeMgr Delegate -----------------------------------------------------------
 
 func (v *Volume) Malloc(n int) (start int64) {
-	return atomic.AddInt64(v.pointer, int64(n)) - int64(n)
+	return v.devmgr.Malloc(n)
 }

@@ -1,10 +1,8 @@
 package bio
 
 import (
-	"errors"
 	"io"
 	"sync"
-	"sync/atomic"
 
 	"github.com/chzyer/logex"
 )
@@ -19,9 +17,6 @@ type Device struct {
 	raw RawDisker
 
 	mutex sync.Mutex
-	ref   int32
-
-	offsetPtr *int64
 
 	// buffer
 	bufStart int64
@@ -29,11 +24,10 @@ type Device struct {
 	buf      [2 * (8 << 20)]byte
 }
 
-func NewDevice(raw RawDisker, offset *int64) *Device {
+func NewDevice(raw RawDisker, offset int64) *Device {
 	bd := &Device{
-		raw:       raw,
-		offsetPtr: offset,
-		bufStart:  atomic.LoadInt64(offset),
+		raw:      raw,
+		bufStart: offset,
 	}
 	return bd
 }
@@ -133,6 +127,13 @@ func (d *Device) Write(b []byte) (int, error) {
 	return n, err
 }
 
+func (d *Device) FlushSize() int64 {
+	d.mutex.Lock()
+	ret := d.bufStart + int64(len(d.buf)/2)
+	d.mutex.Unlock()
+	return ret
+}
+
 func (d *Device) isFullLocked() bool {
 	return d.bufOff >= len(d.buf)/2
 }
@@ -148,18 +149,6 @@ func (d *Device) writeAtLocked(b []byte, off int) (int, error) {
 		d.bufOff = off + len(b)
 	}
 	return len(b), nil
-}
-
-func (d *Device) Require() {
-	atomic.AddInt32(&d.ref, 1)
-}
-
-func (d *Device) Release() {
-	atomic.AddInt32(&d.ref, -1)
-}
-
-func (d *Device) WriteDisk(off int64, disk Diskable) {
-	disk.WriteDisk(d.GetWriter(off, disk.Size()))
 }
 
 // TODO: add lock for writer
@@ -188,10 +177,6 @@ func (d *Device) WriteAt(b []byte, off int64) (int, error) {
 }
 
 func (d *Device) Flush() error {
-	if atomic.LoadInt32(&d.ref) > 0 {
-		return errors.New("can't flush")
-	}
-
 	d.mutex.Lock()
 	if d.bufOff == 0 {
 		d.mutex.Unlock()
@@ -205,8 +190,6 @@ func (d *Device) Flush() error {
 	}
 
 	d.bufStart += int64(n)
-	// sync offset
-	atomic.StoreInt64(d.offsetPtr, d.bufStart)
 	d.bufOff = 0
 	d.mutex.Unlock()
 	return nil

@@ -1,20 +1,12 @@
 package lfs
 
 import (
-	"sync/atomic"
 	"testing"
 
+	"github.com/chzyer/flow"
 	"github.com/chzyer/madq/internal/bio"
 	"github.com/chzyer/test"
 )
-
-type inodeMgrDumpDelegate struct {
-	pointer int64
-}
-
-func (i *inodeMgrDumpDelegate) Malloc(n int) int64 {
-	return atomic.AddInt64(&i.pointer, int64(n)) - int64(n)
-}
 
 func TestInodeMgr(t *testing.T) {
 	defer test.New(t)
@@ -23,9 +15,7 @@ func TestInodeMgr(t *testing.T) {
 	block, err := bio.NewFile(test.Root())
 	test.Nil(err)
 
-	offset := int64(ReservedAreaSize)
-	delegate := &inodeMgrDumpDelegate{offset}
-	im := NewInodeMgr(delegate)
+	im := NewInodeMgr()
 
 	{
 		err := im.Init(block)
@@ -33,8 +23,9 @@ func TestInodeMgr(t *testing.T) {
 	}
 	ptr := im.GetPointer()
 
-	dev := bio.NewDevice(block, ptr)
-	im.Start(dev)
+	f := flow.New()
+	devmgr := bio.NewDeviceMgr(f, bio.NewDevice(block, *ptr), ptr)
+	im.Start(devmgr)
 
 	{
 		inode, err := im.newInode()
@@ -58,11 +49,13 @@ func TestInodeMgr(t *testing.T) {
 			test.Nil(im.Flush())
 		}
 
-		im := NewInodeMgr(delegate)
+		im := NewInodeMgr()
 		{
 			err := im.Init(block)
 			test.Nil(err)
-			im.Start(bio.NewDevice(block, ptr))
+			ptr := im.GetPointer()
+			dev := bio.NewDevice(block, *ptr)
+			im.Start(bio.NewDeviceMgr(f, dev, ptr))
 		}
 		inode2, err := im.GetInode(inode.Ino)
 		test.Nil(err)

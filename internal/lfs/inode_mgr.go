@@ -32,13 +32,8 @@ func (i *InodeMgrState) After(val InodeMgrState) bool {
 	return ((*util.State)(i)).After(util.State(val))
 }
 
-type InodeMgrDelegate interface {
-	Malloc(n int) int64
-}
-
 type InodeMgr struct {
 	state        InodeMgrState
-	delegate     InodeMgrDelegate
 	reservedArea *ReservedArea
 
 	// addr => Inode
@@ -47,12 +42,11 @@ type InodeMgr struct {
 	inodeTableMap map[Address]*InodeTable
 
 	// set on started, please get via `getDev()`
-	dev *bio.Device
+	dev *bio.DeviceMgr
 }
 
-func NewInodeMgr(delegate InodeMgrDelegate) *InodeMgr {
+func NewInodeMgr() *InodeMgr {
 	im := &InodeMgr{
-		delegate:      delegate,
 		reservedArea:  NewReservedArea(),
 		inodeMap:      make(map[Address]*Inode),
 		inodeTableMap: make(map[Address]*InodeTable),
@@ -60,14 +54,14 @@ func NewInodeMgr(delegate InodeMgrDelegate) *InodeMgr {
 	return im
 }
 
-func (i *InodeMgr) getDev() (*bio.Device, error) {
+func (i *InodeMgr) getDev() (*bio.DeviceMgr, error) {
 	if !i.state.After(InodeMgrStateStarted) {
 		return nil, ErrInodeMgrNotStarted.Trace()
 	}
 	return i.dev, nil
 }
 
-func (i *InodeMgr) Start(dev *bio.Device) {
+func (i *InodeMgr) Start(dev *bio.DeviceMgr) {
 	if !i.state.Set(InodeMgrStateStarting) {
 		return
 	}
@@ -193,18 +187,16 @@ func (i *InodeMgr) removeInode(ino int32) error {
 		return logex.Trace(err)
 	}
 
-	dev.Require()
-
-	off := i.delegate.Malloc(InodeTableSize)
+	inodeTableWriter := dev.MallocWriter(InodeTableSize)
 	inodeAddr := inodeTable.Address[l2]
 	inodeTable.Address[l2] = 0
-	dev.WriteDisk(off, inodeTable)
-	i.reservedArea.IndirectInodeTable[l1] = Address(off)
+	inodeTableWriter.WriteDisk(inodeTable)
+	i.reservedArea.IndirectInodeTable[l1] = Address(inodeTableWriter.Offset())
 	delete(i.inodeMap, inodeAddr)
 	delete(i.inodeTableMap, inodeTableAddr)
-	i.inodeTableMap[Address(off)] = inodeTable
+	i.inodeTableMap[Address(inodeTableWriter.Offset())] = inodeTable
 
-	dev.Release()
+	inodeTableWriter.Close()
 
 	return nil
 }
@@ -219,7 +211,6 @@ func (i *InodeMgr) newInode() (*Inode, error) {
 	if err != nil {
 		return nil, logex.Trace(err)
 	}
-	dev.Require()
 
 	size := i.reservedArea.Superblock.InodeCnt
 	i.reservedArea.Superblock.InodeCnt++
@@ -230,33 +221,35 @@ func (i *InodeMgr) newInode() (*Inode, error) {
 		End:    0,
 		Create: time.Now().UnixNano(),
 	}
-	offInode := i.delegate.Malloc(InodeSize)
-	dev.WriteDisk(offInode, inode)
-	i.inodeMap[Address(offInode)] = inode
+	inodeWriter := dev.MallocWriter(InodeSize)
+	inodeWriter.WriteDisk(inode)
+	i.inodeMap[Address(inodeWriter.Offset())] = inode
 
 	l1, l2 := i.reservedArea.GetIdx(inode.Ino)
 	addrInodeTable := i.reservedArea.IndirectInodeTable[l1]
 	inodeTable, _ := i.GetInodeTable(addrInodeTable)
 	if inodeTable != nil {
-		inodeTable.Address[l2] = Address(offInode)
-		inodeTableOff := i.delegate.Malloc(InodeTableSize)
-		i.reservedArea.IndirectInodeTable[l1] = Address(inodeTableOff)
-		dev.WriteDisk(inodeTableOff, inodeTable)
-		i.inodeTableMap[Address(inodeTableOff)] = inodeTable
+		inodeTable.Address[l2] = Address(inodeWriter.Offset())
+		inodeTableWriter := dev.MallocWriter(InodeTableSize)
+		i.reservedArea.IndirectInodeTable[l1] = Address(inodeTableWriter.Offset())
+		inodeTableWriter.WriteDisk(inodeTable)
+		i.inodeTableMap[Address(inodeTableWriter.Offset())] = inodeTable
 		delete(i.inodeTableMap, Address(addrInodeTable))
+		inodeTableWriter.Close()
 	} else {
 		// make a new inodeTable
 		inodeTable = new(InodeTable)
-		newAddrInodeTable := i.delegate.Malloc(InodeTableSize)
+		InodeTableWriter := dev.MallocWriter(InodeTableSize)
 		// set the first address to offset of Inode
-		inodeTable.Address[l2] = Address(offInode)
-		addrInodeTable.Update(Address(newAddrInodeTable))
-		i.inodeTableMap[Address(newAddrInodeTable)] = inodeTable
-		dev.WriteDisk(newAddrInodeTable, inodeTable)
-		i.reservedArea.IndirectInodeTable[l1] = Address(newAddrInodeTable)
+		inodeTable.Address[l2] = Address(inodeWriter.Offset())
+		addrInodeTable.Update(Address(InodeTableWriter.Offset()))
+		i.inodeTableMap[Address(InodeTableWriter.Offset())] = inodeTable
+		InodeTableWriter.WriteDisk(inodeTable)
+		i.reservedArea.IndirectInodeTable[l1] = Address(InodeTableWriter.Offset())
+		InodeTableWriter.Close()
 	}
 
-	dev.Release()
+	inodeWriter.Close()
 
 	return inode, nil
 }

@@ -86,9 +86,9 @@ func TestFile(t *testing.T) {
 	os.RemoveAll(f.root)
 	n, err = f.ReadAt([]byte("  "), 4)
 	test.Equals(n, 0)
-	test.CheckError(err, test.StrNotSuchFile)
+	test.Equal(err, io.EOF)
 
 	n, err = f.WriteAt([]byte("  "), 4)
 	test.Equals(n, 0)
-	test.CheckError(err, test.StrNotSuchFile)
+	test.Equal(err, io.EOF)
 }

@@ -42,7 +42,7 @@ func WriteAt(w io.WriterAt, offset int64, d Diskable) error {
 	return logex.Trace(err)
 }
 
-func ReadDiskable(raw RawDisker, addr int64, disk Diskable) error {
+func ReadDiskable(raw RawDiskerReader, addr int64, disk Diskable) error {
 	ret := make([]byte, disk.Size())
 	n, err := raw.ReadAt(ret, addr)
 	if err != nil {
