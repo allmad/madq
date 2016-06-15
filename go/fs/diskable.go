@@ -132,6 +132,10 @@ func NewDiskWriter(b []byte) *DiskWriter {
 	return &DiskWriter{b: b}
 }
 
+func (w *DiskWriter) Written() int64 {
+	return int64(w.offset)
+}
+
 func (w *DiskWriter) WriteMagic(d Diskable) {
 	w.WriteBytes(d.Magic())
 }

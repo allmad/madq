@@ -13,3 +13,10 @@ func MakeRoom(b []byte, n int) []byte {
 		b = append(b, 0)
 	}
 }
+
+func FloorBlk(n int) int {
+	if n&(BlockSize-1) == 0 {
+		return n
+	}
+	return ((n >> BlockBit) + 1) << BlockBit
+}

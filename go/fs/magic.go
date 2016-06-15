@@ -7,6 +7,8 @@ import (
 
 type Magic []byte
 
+const MagicSize = 4
+
 func (m Magic) String() string {
 	items := []struct {
 		m    Magic

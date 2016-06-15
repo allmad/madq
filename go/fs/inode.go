@@ -5,6 +5,7 @@ import "github.com/chzyer/logex"
 var _ Diskable = new(Inode)
 
 const InodePadding = 44
+const InodeSize = 1024
 
 // size: 1kB
 // one inode can store 37.5MB
@@ -19,7 +20,7 @@ type Inode struct {
 	Prev4,
 	Prev8,
 	Prev16,
-	Prev32,
+	Prev32 *Address
 	PrevGroup Address // 7*8
 
 	GroupSize Int32
@@ -32,6 +33,18 @@ type Inode struct {
 	addr Address // my addr in disk/mem
 }
 
+func NewInode(ino int32) *Inode {
+	return &Inode{
+		Ino:    Int32(ino),
+		Prev:   new(Address),
+		Prev2:  new(Address),
+		Prev4:  new(Address),
+		Prev8:  new(Address),
+		Prev16: new(Address),
+		Prev32: new(Address),
+	}
+}
+
 func (i *Inode) IsFull() bool {
 	return int(i.Size) == BlockSize*len(i.Offsets)
 }
@@ -39,7 +52,7 @@ func (i *Inode) IsFull() bool {
 func (i *Inode) GetBlockSize(idx int) int {
 	lastIdx := i.GetOffsetIdx()
 	if idx == lastIdx {
-		return i.Size % BlockSize
+		return int(i.Size % BlockSize)
 	}
 	return BlockSize
 }
@@ -94,8 +107,8 @@ func (i *Inode) ReadDisk(b []byte) error {
 
 	if err := dr.ReadItems([]DiskReadItem{
 		&i.Ino, &i.Start, &i.Size,
-		&i.Prev, &i.Prev2, &i.Prev4, &i.Prev8,
-		&i.Prev16, &i.Prev32, &i.PrevGroup,
+		i.Prev, i.Prev2, i.Prev4, i.Prev8,
+		i.Prev16, i.Prev32, &i.PrevGroup,
 
 		&i.GroupSize, &i.GroupIdx,
 	}); err != nil {

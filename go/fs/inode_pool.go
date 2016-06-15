@@ -13,8 +13,12 @@ type InodePoolDelegate interface {
 
 // Pool for one file
 type InodePool struct {
-	ino      int32
-	scatter  InodeScatter
+	ino int32
+
+	scatter       InodeScatter
+	scatterOff    int
+	scatterMemOff int
+
 	delegate InodePoolDelegate
 	pool     map[Address]*Inode
 }
@@ -38,30 +42,51 @@ func (i *InodePool) RefPayloadBlock() (*Inode, int, error) {
 	}
 
 	// old inode is full
-	return i.next(inode), idx, nil
+	return i.next(inode), 0, nil
 }
 
-func (i *InodePool) next(ino *Inode) *Inode {
-	ret := &Inode{
-		Ino:   ino.Ino,
-		Start: ino.Start + Int32(len(ino.Offsets)),
+func (i *InodePool) setPrevs(inode *Inode) error {
+	pair := []struct {
+		addr *Address
+		idx  int
+	}{
+		{inode.Prev32, 31},
+		{inode.Prev, 0},
+		{inode.Prev2, 1},
+		{inode.Prev4, 3},
+		{inode.Prev8, 7},
+		{inode.Prev16, 15},
 	}
+	for _, p := range pair {
+		ino, err := i.getInScatter(p.idx)
+		if err != nil {
+			return err
+		}
+		if ino == nil {
+			continue
+		}
+		*p.addr = ino.addr
+	}
+	return nil
+}
+
+func (i *InodePool) next(lastest *Inode) *Inode {
+	ret := &Inode{
+		Ino:   lastest.Ino,
+		Start: lastest.Start + Int32(len(lastest.Offsets)),
+	}
+	i.setPrevs(ret)
+
 	ret.addr.SetMem(unsafe.Pointer(ret))
+	i.pool[ret.addr] = ret
+
+	i.scatter.Push(ret)
 	return ret
 }
 
 // get newest inode from memory or disk
 func (i *InodePool) GetLastest() (*Inode, error) {
-	inode := i.scatter.Current()
-	if inode != nil {
-		return inode, nil
-	}
-	inode, err := i.delegate.GetInode(i.ino)
-	if err != nil {
-		return nil, logex.Trace(err)
-	}
-	i.scatter.Push(inode)
-	return inode, nil
+	return i.getInScatter(0)
 }
 
 func (i *InodePool) GetByAddr(addr Address) (*Inode, error) {
@@ -75,6 +100,49 @@ func (i *InodePool) GetByAddr(addr Address) (*Inode, error) {
 		i.pool[addr] = ino
 	}
 	return ino, nil
+}
+
+// try to load inode one by one into memory
+// if return (nil, nil), means this file not have so much inodes yet.
+func (i *InodePool) getInScatter(n int) (*Inode, error) {
+	idx := len(i.scatter) - 1 - n
+	if i.scatter[idx] != nil {
+		return i.scatter[idx], nil
+	}
+
+	k := len(i.scatter) - 1 - i.scatterOff
+	for ; k <= len(i.scatter)-1-n; k-- {
+		if i.scatter[k] == nil {
+			// lastest one
+			if k == len(i.scatter)-1 {
+				inode, err := i.delegate.GetInode(i.ino)
+				if err != nil {
+					return nil, logex.Trace(err, k)
+				}
+				i.scatter[k] = inode
+			} else {
+				if i.scatter[k+1].Start == 0 {
+					break
+				}
+				addr := i.scatter[k+1].Prev
+				if addr.IsInMem() {
+					panic("can't be in mem")
+				}
+				inode, err := i.delegate.GetInodeByAddr(*addr)
+				if err != nil {
+					return nil, logex.Trace(err, k)
+				}
+				i.scatter[k] = inode
+			}
+			// already the first one
+			if i.scatter[k].Start == 0 {
+				break
+			}
+		}
+	}
+	i.scatterOff = k + 1
+
+	return i.scatter[len(i.scatter)-1-n], nil
 }
 
 type InodeScatter [32]*Inode

@@ -9,7 +9,7 @@ import (
 
 func TestInode(t *testing.T) {
 	defer test.New(t)
-	ino := new(Inode)
+	ino := NewInode(0)
 
 	ino.Size = 12
 	for i := range ino.Offsets {
@@ -20,7 +20,7 @@ func TestInode(t *testing.T) {
 	rw := NewDiskBuffer(buf)
 	rw.WriteItem(ino)
 
-	newIno := new(Inode)
+	newIno := NewInode(0)
 	err := rw.ReadItem(newIno)
 	test.Nil(err)
 	test.Equal(ino, newIno)
