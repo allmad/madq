@@ -2,6 +2,7 @@ package fs
 
 import (
 	"encoding/binary"
+	"fmt"
 	"unsafe"
 )
 
@@ -28,6 +29,14 @@ func (v Int32) WriteDisk(w []byte) {
 var _ DiskItem = new(Address)
 
 type Address int64
+
+func (a *Address) Set(to Address) {
+	*a = to
+}
+
+func (a *Address) String() string {
+	return fmt.Sprint(*a)
+}
 
 func (Address) DiskSize() int { return 8 }
 

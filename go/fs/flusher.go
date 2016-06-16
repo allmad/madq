@@ -49,8 +49,14 @@ func (f *Flusher) handleOpInPartialArea(dw *DiskWriter, op *flusherWriteOp) erro
 		dw.WriteBytes(oldData)
 	}
 	dw.WriteBytes(op.data)
+	inoAddr := f.getAddr(dw.Written())
 	dw.WriteItem(ino)
+	op.inoPool.OnFlush(ino, inoAddr)
 	return nil
+}
+
+func (f *Flusher) getAddr(offset int64) Address {
+	return Address(f.offset + offset)
 }
 
 func (f *Flusher) handleOpInDataArea(dw *DiskWriter, op *flusherWriteOp) error {
@@ -81,8 +87,7 @@ writePayload:
 	dw.WriteBytes(op.data[:BlockSize-blkSize])
 	op.data = op.data[BlockSize-blkSize:]
 
-	ino.Offsets[idx] = ShortAddr(f.offset + dw.Written())
-	ino.Size += Int32(BlockSize - blkSize)
+	ino.SetOffset(idx, ShortAddr(f.offset+dw.Written()), BlockSize-blkSize)
 	if len(inos) == 0 || inos[len(inos)-1] != ino {
 		inos = append(inos, ino)
 	}
@@ -90,14 +95,15 @@ writePayload:
 
 writeInode:
 	for _, ino := range inos {
-
+		inoAddr := f.getAddr(dw.Written())
 		dw.WriteItem(ino)
+		op.inoPool.OnFlush(ino, inoAddr)
 	}
 
 	return nil
 }
 
-func (f *Flusher) handleOps(data []byte, ops []*flusherWriteOp) (int64, int64) {
+func (f *Flusher) handleOps(data []byte, ops []*flusherWriteOp) int64 {
 	// p: payload, ino: inode, b: block, pp: partial payload
 	// | data area                           | partial area            |
 	// | b1 | b2 | b3                        | b4                      |
@@ -115,9 +121,6 @@ func (f *Flusher) handleOps(data []byte, ops []*flusherWriteOp) (int64, int64) {
 		}
 	}
 
-	dw.WriteBytes(MagicEOF)
-	partialcp := dw.Written()
-
 	// in partial area
 	for _, op := range ops {
 		// ignore if we only want to write inode without payload
@@ -132,16 +135,12 @@ func (f *Flusher) handleOps(data []byte, ops []*flusherWriteOp) (int64, int64) {
 
 	dw.WriteBytes(MagicEOF)
 
-	return partialcp, dw.Written()
-}
-
-func (f *Flusher) updateInodes() {
-
+	return dw.Written()
 }
 
 func (f *Flusher) flush(fb *flushBuffer) {
 	buffer := fb.alloc()
-	partialcp, written := f.handleOps(buffer, fb.ops())
+	written := f.handleOps(buffer, fb.ops())
 	buffer = buffer[:written]
 
 	// write to disk
@@ -154,7 +153,6 @@ flush:
 	}
 
 	f.offset += int64(len(buffer))
-	_ = partialcp
 	// write partialcp
 
 	fb.reset()
@@ -220,17 +218,12 @@ func (f *Flusher) Close() {
 type flushBuffer struct {
 	bufferingOps  []*flusherWriteOp
 	bufferingSize int
-	inodes        []*Inode
 	buffer        []byte
 }
 
 func (f *flushBuffer) addOp(op *flusherWriteOp) {
 	f.bufferingOps = append(f.bufferingOps, op)
 	f.bufferingSize += FloorBlk(len(op.data)) + 2*InodeSize
-}
-
-func (f *flushBuffer) addInode(ino *Inode) {
-	f.inodes = append(f.inodes, ino)
 }
 
 func (f *flushBuffer) alloc() []byte {
@@ -247,5 +240,4 @@ func (f *flushBuffer) reset() {
 	f.bufferingOps = f.bufferingOps[:0]
 	f.bufferingSize = 0
 	f.buffer = f.buffer[:0]
-	f.inodes = f.inodes[:0]
 }

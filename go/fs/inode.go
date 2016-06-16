@@ -6,6 +6,7 @@ var _ Diskable = new(Inode)
 
 const InodePadding = 44
 const InodeSize = 1024
+const InodeCap = 150 * BlockSize
 
 // size: 1kB
 // one inode can store 37.5MB
@@ -60,6 +61,11 @@ func (i *Inode) GetBlockSize(idx int) int {
 func (i *Inode) GetOffsetIdx() int {
 	// 256k per Offset
 	return int(i.Size) >> BlockBit
+}
+
+func (i *Inode) SetOffset(idx int, addr ShortAddr, size int) {
+	i.Offsets[idx] = addr
+	i.Size += Int32(size)
 }
 
 func (i *Inode) DiskSize() int { return 1024 }

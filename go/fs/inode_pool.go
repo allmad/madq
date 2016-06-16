@@ -15,9 +15,7 @@ type InodePoolDelegate interface {
 type InodePool struct {
 	ino int32
 
-	scatter       InodeScatter
-	scatterOff    int
-	scatterMemOff int
+	scatter InodeScatter
 
 	delegate InodePoolDelegate
 	pool     map[Address]*Inode
@@ -37,7 +35,7 @@ func (i *InodePool) RefPayloadBlock() (*Inode, int, error) {
 		return nil, -1, logex.Trace(err)
 	}
 	idx := inode.GetOffsetIdx()
-	if idx < len(inode.Offsets)-1 {
+	if idx <= len(inode.Offsets)-1 {
 		return inode, idx, nil
 	}
 
@@ -45,17 +43,21 @@ func (i *InodePool) RefPayloadBlock() (*Inode, int, error) {
 	return i.next(inode), 0, nil
 }
 
+func (i *InodePool) getInPool(addr Address) *Inode {
+	return i.pool[addr]
+}
+
 func (i *InodePool) setPrevs(inode *Inode) error {
 	pair := []struct {
-		addr *Address
+		addr **Address
 		idx  int
 	}{
-		{inode.Prev32, 31},
-		{inode.Prev, 0},
-		{inode.Prev2, 1},
-		{inode.Prev4, 3},
-		{inode.Prev8, 7},
-		{inode.Prev16, 15},
+		{&inode.Prev, 0},
+		{&inode.Prev2, 1},
+		{&inode.Prev4, 3},
+		{&inode.Prev8, 7},
+		{&inode.Prev16, 15},
+		{&inode.Prev32, 31},
 	}
 	for _, p := range pair {
 		ino, err := i.getInScatter(p.idx)
@@ -63,11 +65,29 @@ func (i *InodePool) setPrevs(inode *Inode) error {
 			return err
 		}
 		if ino == nil {
-			continue
+			break
 		}
-		*p.addr = ino.addr
+		*p.addr = &ino.addr
 	}
 	return nil
+}
+
+func (i *InodePool) OnFlush(ino *Inode, addr Address) {
+	if ino.addr == addr {
+		return
+	}
+	i.pool[addr] = ino
+	oldAddr := ino.addr
+	ino.addr.Set(addr)
+	delete(i.pool, oldAddr)
+}
+
+func (i *InodePool) InitInode() *Inode {
+	ret := NewInode(i.ino)
+	ret.addr.SetMem(unsafe.Pointer(ret))
+	i.pool[ret.addr] = ret
+	i.scatter.Push(ret)
+	return ret
 }
 
 func (i *InodePool) next(lastest *Inode) *Inode {
@@ -110,7 +130,7 @@ func (i *InodePool) getInScatter(n int) (*Inode, error) {
 		return i.scatter[idx], nil
 	}
 
-	k := len(i.scatter) - 1 - i.scatterOff
+	k := len(i.scatter) - 1
 	for ; k <= len(i.scatter)-1-n; k-- {
 		if i.scatter[k] == nil {
 			// lastest one
@@ -140,7 +160,6 @@ func (i *InodePool) getInScatter(n int) (*Inode, error) {
 			}
 		}
 	}
-	i.scatterOff = k + 1
 
 	return i.scatter[len(i.scatter)-1-n], nil
 }
@@ -150,8 +169,4 @@ type InodeScatter [32]*Inode
 func (is *InodeScatter) Push(i *Inode) {
 	copy(is[:], is[1:])
 	is[len(is)-1] = i
-}
-
-func (s *InodeScatter) Current() *Inode {
-	return s[len(s)-1]
 }
