@@ -14,6 +14,7 @@ func (m Magic) String() string {
 		m    Magic
 		name string
 	}{
+		{MagicEOF, "EOF"},
 		{MagicInode, "inode"},
 	}
 

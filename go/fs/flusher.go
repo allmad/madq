@@ -49,9 +49,17 @@ func (f *Flusher) handleOpInPartialArea(dw *DiskWriter, op *flusherWriteOp) erro
 		dw.WriteBytes(oldData)
 	}
 	dw.WriteBytes(op.data)
-	inoAddr := f.getAddr(dw.Written())
-	dw.WriteItem(ino)
-	op.inoPool.OnFlush(ino, inoAddr)
+	if len(op.tmpInodes) == 0 || op.tmpInodes[len(op.tmpInodes)-1] != ino {
+		op.tmpInodes = append(op.tmpInodes, ino)
+	}
+
+	// write inode
+	for _, ino := range op.tmpInodes {
+		inoAddr := f.getAddr(dw.Written())
+		dw.WriteItem(ino)
+		op.inoPool.OnFlush(ino, inoAddr)
+	}
+
 	return nil
 }
 
@@ -81,7 +89,7 @@ writePayload:
 	}
 
 	if len(op.data) < BlockSize-blkSize {
-		goto writeInode
+		goto exit
 	}
 
 	dw.WriteBytes(op.data[:BlockSize-blkSize])
@@ -93,23 +101,16 @@ writePayload:
 	}
 	goto writePayload
 
-writeInode:
-	for _, ino := range inos {
-		inoAddr := f.getAddr(dw.Written())
-		dw.WriteItem(ino)
-		op.inoPool.OnFlush(ino, inoAddr)
-	}
-
+exit:
+	op.tmpInodes = inos
 	return nil
 }
 
 func (f *Flusher) handleOps(data []byte, ops []*flusherWriteOp) int64 {
 	// p: payload, ino: inode, b: block, pp: partial payload
-	// | data area                           | partial area            |
-	// | b1 | b2 | b3                        | b4                      |
-	// | p1 | p2 | ino1(p1) + ino2(p2) + EOF | pp1 + pp2 + ino1 + ino2 |
-	// inode always in partial area until they can fill one block (256)
-	// every write will overwrite partial area
+	// | data area | partial area            |
+	// | b1 | b2   | b3                      |
+	// | p1 | p2   | pp1 + pp2 + ino1 + ino2 |
 	// > how to fsck ? follow a MagicEOF
 	dw := NewDiskWriter(data)
 
@@ -192,12 +193,14 @@ loop:
 }
 
 type flusherWriteOp struct {
+	tmpInodes []*Inode
+
 	inoPool *InodePool
 	data    []byte
 }
 
 func (f *Flusher) WriteByInode(inoPool *InodePool, data []byte) {
-	f.opChan <- &flusherWriteOp{inoPool, data}
+	f.opChan <- &flusherWriteOp{inoPool: inoPool, data: data}
 }
 
 func (f *Flusher) Close() {
