@@ -29,6 +29,11 @@ func NewInodePool(ino int32, delegate InodePoolDelegate) *InodePool {
 	}
 }
 
+func (i *InodePool) CleanCache() {
+	i.pool = make(map[Address]*Inode, 32)
+	i.scatter.Clean()
+}
+
 func (i *InodePool) RefPayloadBlock() (*Inode, int, error) {
 	inode, err := i.GetLastest()
 	if err != nil {
@@ -165,6 +170,12 @@ func (i *InodePool) getInScatter(n int) (*Inode, error) {
 }
 
 type InodeScatter [32]*Inode
+
+func (is *InodeScatter) Clean() {
+	for idx := range is {
+		is[idx] = nil
+	}
+}
 
 func (is *InodeScatter) Push(i *Inode) {
 	copy(is[:], is[1:])

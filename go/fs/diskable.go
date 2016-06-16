@@ -125,11 +125,20 @@ func (r *DiskReader) ReadMagic(d Diskable) error {
 
 type DiskWriter struct {
 	b      []byte
+	mark   int
 	offset int
 }
 
 func NewDiskWriter(b []byte) *DiskWriter {
 	return &DiskWriter{b: b}
+}
+
+func (w *DiskWriter) Mark() {
+	w.mark = w.offset
+}
+
+func (w *DiskWriter) Reset() {
+	w.offset = w.mark
 }
 
 func (w *DiskWriter) Written() int64 {
@@ -142,7 +151,7 @@ func (w *DiskWriter) WriteMagic(d Diskable) {
 
 func (w *DiskWriter) WriteBytes(b []byte) {
 	n := len(b)
-	nw := copy(w.b, b)
+	nw := copy(w.b[w.offset:], b)
 	if n != nw {
 		panic("not enough memory space")
 	}

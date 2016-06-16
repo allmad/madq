@@ -1,0 +1,2 @@
+cover:
+	../../scripts/cover.sh

@@ -18,15 +18,24 @@ type Flusher struct {
 	offset   int64 // point to the start of partial
 	delegate FlushDelegate
 
-	opChan chan *flusherWriteOp
+	flushChan chan struct{}
+	opChan    chan *flusherWriteOp
 }
 
-func NewFlusher(f *flow.Flow, interval time.Duration, delegate FlushDelegate) *Flusher {
+type FlusherConfig struct {
+	Interval time.Duration
+	Delegate FlushDelegate
+	Offset   int64
+}
+
+func NewFlusher(f *flow.Flow, cfg *FlusherConfig) *Flusher {
 	flusher := &Flusher{
-		interval: interval,
-		opChan:   make(chan *flusherWriteOp, 8),
-		delegate: delegate,
-		flow:     f.Fork(1),
+		interval:  cfg.Interval,
+		opChan:    make(chan *flusherWriteOp, 8),
+		flushChan: make(chan struct{}, 1),
+		offset:    cfg.Offset,
+		delegate:  cfg.Delegate,
+		flow:      f.Fork(1),
 	}
 	f.SetOnClose(flusher.Close)
 	go flusher.loop()
@@ -39,6 +48,8 @@ func (f *Flusher) handleOpInPartialArea(dw *DiskWriter, op *flusherWriteOp) erro
 		return logex.Tracefmt(
 			"error in fetch inode(%v): %v", op.inoPool.ino, err)
 	}
+
+	dataAddr := ShortAddr(f.getAddr(dw.Written()))
 	blkSize := ino.GetBlockSize(idx)
 	if blkSize > 0 {
 		oldData, err := f.delegate.ReadData(ino.Offsets[idx], blkSize)
@@ -49,18 +60,21 @@ func (f *Flusher) handleOpInPartialArea(dw *DiskWriter, op *flusherWriteOp) erro
 		dw.WriteBytes(oldData)
 	}
 	dw.WriteBytes(op.data)
+
+	ino.SetOffset(idx, dataAddr, len(op.data))
+
 	if len(op.tmpInodes) == 0 || op.tmpInodes[len(op.tmpInodes)-1] != ino {
 		op.tmpInodes = append(op.tmpInodes, ino)
 	}
 
-	// write inode
-	for _, ino := range op.tmpInodes {
-		inoAddr := f.getAddr(dw.Written())
-		dw.WriteItem(ino)
-		op.inoPool.OnFlush(ino, inoAddr)
-	}
-
 	return nil
+}
+
+func (f *Flusher) Flush() {
+	select {
+	case f.flushChan <- struct{}{}:
+	default:
+	}
 }
 
 func (f *Flusher) getAddr(offset int64) Address {
@@ -69,6 +83,7 @@ func (f *Flusher) getAddr(offset int64) Address {
 
 func (f *Flusher) handleOpInDataArea(dw *DiskWriter, op *flusherWriteOp) error {
 	var inos []*Inode
+	var dataAddr ShortAddr
 
 writePayload:
 	ino, idx, err := op.inoPool.RefPayloadBlock()
@@ -77,8 +92,9 @@ writePayload:
 			"error in fetch inode(%v): %v", op.inoPool.ino, err)
 	}
 
-	blkSize := ino.GetBlockSize(idx)
+	dataAddr = ShortAddr(f.getAddr(dw.Written()))
 
+	blkSize := ino.GetBlockSize(idx)
 	if blkSize > 0 {
 		oldData, err := f.delegate.ReadData(ino.Offsets[idx], blkSize)
 		if err != nil {
@@ -95,7 +111,7 @@ writePayload:
 	dw.WriteBytes(op.data[:BlockSize-blkSize])
 	op.data = op.data[BlockSize-blkSize:]
 
-	ino.SetOffset(idx, ShortAddr(f.offset+dw.Written()), BlockSize-blkSize)
+	ino.SetOffset(idx, dataAddr, BlockSize-blkSize)
 	if len(inos) == 0 || inos[len(inos)-1] != ino {
 		inos = append(inos, ino)
 	}
@@ -115,27 +131,46 @@ func (f *Flusher) handleOps(data []byte, ops []*flusherWriteOp) int64 {
 	dw := NewDiskWriter(data)
 
 	// in data area
-	for _, op := range ops {
+	for idx, op := range ops {
+		dw.Mark()
 		if err := f.handleOpInDataArea(dw, op); err != nil {
-			logex.Error(err)
+			dw.Reset()
+			op.done <- logex.Trace(err)
+			ops[idx] = nil
 			continue
 		}
 	}
 
 	// in partial area
-	for _, op := range ops {
-		// ignore if we only want to write inode without payload
-		// if len(op.data) == 0 {
-		//	continue
-		// }
+	for idx, op := range ops {
+		if op == nil {
+			continue
+		}
+		if len(op.data) == 0 {
+			continue
+		}
+		dw.Mark()
 		if err := f.handleOpInPartialArea(dw, op); err != nil {
-			logex.Error(err)
+			dw.Reset()
+			op.done <- logex.Trace(err)
+			ops[idx] = nil
 			continue
 		}
 	}
 
-	dw.WriteBytes(MagicEOF)
+	// write inode
+	for _, op := range ops {
+		if op == nil {
+			continue
+		}
+		for _, ino := range op.tmpInodes {
+			inoAddr := f.getAddr(dw.Written())
+			dw.WriteItem(ino)
+			op.inoPool.OnFlush(ino, inoAddr)
+		}
+	}
 
+	dw.WriteBytes(MagicEOF)
 	return dw.Written()
 }
 
@@ -149,13 +184,22 @@ flush:
 	err := f.delegate.WriteData(ShortAddr(f.offset), buffer)
 	if err != nil {
 		logex.Error("error in write data, wait 1 sec:", err)
-		time.Sleep(time.Second)
-		goto flush
+		switch f.flow.CloseOrWait(time.Second) {
+		case flow.F_CLOSED:
+			for _, op := range fb.ops() {
+				op.done <- logex.Trace(err)
+			}
+			fb.reset()
+			return
+		case flow.F_TIMEOUT:
+			goto flush
+		}
 	}
 
 	f.offset += int64(len(buffer))
-	// write partialcp
-
+	for _, op := range fb.ops() {
+		op.done <- nil
+	}
 	fb.reset()
 }
 
@@ -180,6 +224,8 @@ loop:
 				select {
 				case <-timer.C:
 					break buffering
+				case <-f.flushChan:
+					break buffering
 				case op := <-f.opChan:
 					fb.addOp(op)
 				}
@@ -196,11 +242,12 @@ type flusherWriteOp struct {
 	tmpInodes []*Inode
 
 	inoPool *InodePool
+	done    chan error
 	data    []byte
 }
 
-func (f *Flusher) WriteByInode(inoPool *InodePool, data []byte) {
-	f.opChan <- &flusherWriteOp{inoPool: inoPool, data: data}
+func (f *Flusher) WriteByInode(inoPool *InodePool, data []byte, done chan error) {
+	f.opChan <- &flusherWriteOp{inoPool: inoPool, data: data, done: done}
 }
 
 func (f *Flusher) Close() {
@@ -226,11 +273,11 @@ type flushBuffer struct {
 
 func (f *flushBuffer) addOp(op *flusherWriteOp) {
 	f.bufferingOps = append(f.bufferingOps, op)
-	f.bufferingSize += FloorBlk(len(op.data)) + 2*InodeSize
+	f.bufferingSize += len(op.data) + GetBlockCnt(len(op.data))*InodeSize
 }
 
 func (f *flushBuffer) alloc() []byte {
-	f.bufferingSize += 2 * MagicSize // MagicEOF
+	f.bufferingSize += MagicSize // MagicEOF
 	f.buffer = MakeRoom(f.buffer, f.bufferingSize)
 	return f.buffer
 }

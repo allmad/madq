@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
 	"time"
@@ -38,11 +39,75 @@ func (m *flusherDumpDelegate) WriteData(addr ShortAddr, b []byte) error {
 	return nil
 }
 
+type testInodePoolMemDiskDelegate struct {
+	lastestAddr Address
+	md          *test.MemDisk
+}
+
+func (t *testInodePoolMemDiskDelegate) GetInode(ino int32) (*Inode, error) {
+	return t.GetInodeByAddr(t.lastestAddr)
+}
+
+func (t *testInodePoolMemDiskDelegate) GetInodeByAddr(addr Address) (*Inode, error) {
+	ino := NewInode(0)
+	buf := make([]byte, ino.DiskSize())
+	_, err := t.md.ReadAt(buf, int64(addr))
+	if err != nil {
+		return nil, err
+	}
+	if err := ino.ReadDisk(buf); err != nil {
+		return nil, err
+	}
+	return ino, nil
+}
+
 func TestFlusher(t *testing.T) {
 	defer test.New(t)
 
-	delegate := &flusherDumpDelegate{test.NewMemDisk(0)}
+	flusherDelegate := &flusherDumpDelegate{test.NewMemDisk(0)}
 	f := flow.New()
-	flusher := NewFlusher(f, time.Second, delegate)
+	flusher := NewFlusher(f, &FlusherConfig{
+		Interval: time.Second,
+		Delegate: flusherDelegate,
+		Offset:   1,
+	})
+	{
+		ipool0 := NewInodePool(0, nil)
+		ipool0.InitInode()
+		done := make(chan error)
+		flusher.WriteByInode(ipool0, []byte("hello"), done)
+		flusher.Flush()
+		test.Nil(<-done)
+	}
+	{
+		// println("--------------", flusher.offset)
+		delegate := &testInodePoolMemDiskDelegate{
+			lastestAddr: 5 + 1,
+			md:          flusherDelegate.md,
+		}
+		ipool0 := NewInodePool(0, delegate)
+		inode, err := ipool0.GetLastest()
+		test.Nil(err)
+		test.Equal(inode.Size, Int32(5))
+		done := make(chan error)
+		tmpdata := test.RandBytes((256 << 10) + 10)
+		flusher.WriteByInode(ipool0, tmpdata, done)
+		flusher.Flush()
+		test.Nil(<-done)
+		test.Equal(inode.Size, Int32((256<<10)+10+5))
+
+		block1 := make([]byte, BlockSize)
+		copy(block1, []byte("hello"))
+		n := copy(block1[5:], tmpdata)
+		block2 := make([]byte, len(tmpdata)-n)
+		copy(block2, tmpdata[n:])
+		gotBlock1 := make([]byte, len(block1))
+		gotBlock2 := make([]byte, len(block2))
+		test.ReadAt(delegate.md, gotBlock1, int64(inode.Offsets[0]))
+		test.True(bytes.Equal(gotBlock1, block1))
+		test.ReadAt(delegate.md, gotBlock2, int64(inode.Offsets[1]))
+		test.Equal(gotBlock2, block2)
+
+	}
 	flusher.Close()
 }
