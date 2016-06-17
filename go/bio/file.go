@@ -21,6 +21,11 @@ var (
 	ErrFileInvalidOffset = logex.Define("invalid offset")
 )
 
+type ReadWriterAt interface {
+	ReadAt(b []byte, off int64) (int, error)
+	WriteAt(b []byte, off int64) (int, error)
+}
+
 type File struct {
 	root      string
 	bit       uint

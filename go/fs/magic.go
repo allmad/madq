@@ -24,7 +24,7 @@ func (m Magic) String() string {
 		}
 	}
 
-	return fmt.Sprintf("unknown: %x", m)
+	return fmt.Sprintf("unknown: %x", []byte(m))
 }
 
 var (

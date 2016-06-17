@@ -65,17 +65,17 @@ func TestInodePool(t *testing.T) {
 	ino0, err := ip.getInScatter(1)
 	test.Nil(err)
 	// Offsets: [0, ..., 149]
-	checkInoOffset(ino0, 0, 150)
+	checkInoOffset(ino0, 0, InodeBlockCnt)
 	test.True(ino0.Start == 0)
 	test.True(ino0.Size == InodeCap)
 
 	// start: 1
 	ino1, err := ip.getInScatter(0)
 	test.Nil(err)
-	test.True(ino1.Start == 150)
+	test.True(ino1.Start == InodeBlockCnt)
 	test.True(ino1.Size == BlockSize)
-	checkInoOffset(ino1, 150, 1)
-	test.True(ino0.addr == *ino1.Prev)
+	checkInoOffset(ino1, InodeBlockCnt, 1)
+	test.True(ino0.addr == *ino1.PrevInode[0])
 
 	// flush to disk
 	// 1. addrs are changed
@@ -83,7 +83,7 @@ func TestInodePool(t *testing.T) {
 	ip.OnFlush(ino0, 1)
 	ip.OnFlush(ino1, 2)
 
-	test.True(ino0.addr == *ino1.Prev)
+	test.True(ino0.addr == *ino1.PrevInode[0])
 	test.Equal(ip.getInPool(ino0.addr), ino0)
 	test.Equal(ip.getInPool(ino1.addr), ino1)
 
@@ -91,7 +91,7 @@ func TestInodePool(t *testing.T) {
 	inode, idx, err := ip.RefPayloadBlock()
 	test.Nil(err)
 	inode.SetOffset(idx, nextN(), 5)
-	checkInoOffset(ino1, 150, 2)
+	checkInoOffset(ino1, InodeBlockCnt, 2)
 	test.Equal(inode, ino1)
 
 	ip.OnFlush(ino1, 3)
@@ -123,9 +123,21 @@ func TestInodePool(t *testing.T) {
 		inode, err := ip.getInScatter(0)
 		test.Nil(err)
 		test.Equal(inode, ino1)
-		test.True(inode.Offsets[0] == 150)
-		test.True(inode.Offsets[1] == 152)
-		test.True(inode.Offsets[2] == 153)
+		test.True(inode.Offsets[0] == InodeBlockCnt)
+		test.True(inode.Offsets[1] == InodeBlockCnt+2)
+		test.True(inode.Offsets[2] == InodeBlockCnt+3)
 		test.True(inode.Size == BlockSize*2+5)
 	}
+}
+
+func TestInodePoolSeek(t *testing.T) {
+	defer test.New(t)
+
+	delegate := &testInodePoolDelegate{
+		data: make(map[Address]*Inode),
+	}
+	ip := NewInodePool(0, delegate)
+	ip.InitInode()
+
+	ip.RefPayloadBlock()
 }

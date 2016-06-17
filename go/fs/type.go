@@ -54,6 +54,10 @@ func (a *Address) SetMem(p unsafe.Pointer) {
 	*a = -Address(uintptr(p))
 }
 
+func (a Address) IsEmpty() bool {
+	return a == 0
+}
+
 func (a Address) IsInMem() bool {
 	return a < 0
 }

@@ -7,16 +7,17 @@ import (
 	"time"
 
 	"github.com/chzyer/flow"
+	"github.com/chzyer/madq/go/bio"
 	"github.com/chzyer/test"
 )
 
-var _ FlushDelegate = new(flusherDumpDelegate)
+var _ FlushDelegate = new(testFlusherDelegate)
 
-type flusherDumpDelegate struct {
-	md *test.MemDisk
+type testFlusherDelegate struct {
+	md bio.ReadWriterAt
 }
 
-func (m *flusherDumpDelegate) ReadData(addr ShortAddr, n int) ([]byte, error) {
+func (m *testFlusherDelegate) ReadData(addr ShortAddr, n int) ([]byte, error) {
 	buf := make([]byte, n)
 	n, err := m.md.ReadAt(buf, int64(addr))
 	if err != nil {
@@ -28,7 +29,7 @@ func (m *flusherDumpDelegate) ReadData(addr ShortAddr, n int) ([]byte, error) {
 	return buf, nil
 }
 
-func (m *flusherDumpDelegate) WriteData(addr ShortAddr, b []byte) error {
+func (m *testFlusherDelegate) WriteData(addr ShortAddr, b []byte) error {
 	n, err := m.md.WriteAt(b, int64(addr))
 	if err != nil {
 		return err
@@ -41,7 +42,7 @@ func (m *flusherDumpDelegate) WriteData(addr ShortAddr, b []byte) error {
 
 type testInodePoolMemDiskDelegate struct {
 	lastestAddr Address
-	md          *test.MemDisk
+	md          bio.ReadWriterAt
 }
 
 func (t *testInodePoolMemDiskDelegate) GetInode(ino int32) (*Inode, error) {
@@ -61,10 +62,34 @@ func (t *testInodePoolMemDiskDelegate) GetInodeByAddr(addr Address) (*Inode, err
 	return ino, nil
 }
 
+func TestFlusherBigRW(t *testing.T) {
+	defer test.New(t)
+
+	flusherDelegate := &testFlusherDelegate{test.NewMemDisk(0)}
+	f := flow.New()
+	flusher := NewFlusher(f, &FlusherConfig{
+		Interval: time.Second,
+		Delegate: flusherDelegate,
+		Offset:   1,
+	})
+
+	ipool0 := NewInodePool(0, nil)
+	ipool0.InitInode()
+	done := make(chan error, 1)
+	expect := test.SeqBytes(BlockSize + 5)
+
+	testTime := 10
+	for i := 0; i < testTime; i++ {
+		flusher.WriteByInode(ipool0, expect, done)
+		flusher.Flush()
+		test.Nil(<-done)
+	}
+}
+
 func TestFlusher(t *testing.T) {
 	defer test.New(t)
 
-	flusherDelegate := &flusherDumpDelegate{test.NewMemDisk(0)}
+	flusherDelegate := &testFlusherDelegate{test.NewMemDisk(0)}
 	f := flow.New()
 	flusher := NewFlusher(f, &FlusherConfig{
 		Interval: time.Second,

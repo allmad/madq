@@ -11,6 +11,8 @@ type InodePoolDelegate interface {
 	GetInodeByAddr(addr Address) (*Inode, error)
 }
 
+var inodeOffsetIdx = initOffsetIdx()
+
 // Pool for one file
 type InodePool struct {
 	ino int32
@@ -19,13 +21,91 @@ type InodePool struct {
 
 	delegate InodePoolDelegate
 	pool     map[Address]*Inode
+
+	// cache for seek
+	offsetInode map[int32]*Inode
 }
 
 func NewInodePool(ino int32, delegate InodePoolDelegate) *InodePool {
 	return &InodePool{
-		ino:      ino,
-		delegate: delegate,
-		pool:     make(map[Address]*Inode, 32),
+		ino:         ino,
+		delegate:    delegate,
+		pool:        make(map[Address]*Inode, 32),
+		offsetInode: make(map[int32]*Inode, 32),
+	}
+}
+
+func (i *InodePool) SeekNext(inode *Inode) (*Inode, error) {
+	return i.seekPrev(int64(inode.Start*BlockSize + InodeSize))
+}
+
+func (i *InodePool) SeekPrev(offset int64) (*Inode, error) {
+	return i.seekPrev(offset)
+}
+
+func (i *InodePool) seekPrev(offset int64) (*Inode, error) {
+	inoIdx := GetInodeIdx(offset) // wrong
+	if inode := i.offsetInode[inoIdx]; inode != nil {
+		return inode, nil
+	}
+
+	lastest, err := i.getInScatter(0)
+	if err != nil {
+		return nil, logex.Trace(err)
+	}
+
+	ino, err := i.seekInode(lastest, inoIdx)
+	if err != nil {
+		return nil, logex.Trace(err)
+	}
+	return ino, nil
+}
+
+func (i *InodePool) getPrevInode(ino *Inode, n int32) (*Inode, error) {
+	if n == 0 {
+		return ino, nil
+	}
+
+	addr := *ino.PrevInode[inodeOffsetIdx[n]]
+	if ino := i.pool[addr]; ino != nil {
+		return ino, nil
+	}
+	if addr.IsInMem() {
+		panic("not found in memory")
+	}
+	if addr.IsEmpty() {
+		panic("addr is empty")
+	}
+
+	ino, err := i.delegate.GetInodeByAddr(addr)
+	if err != nil {
+		return nil, err
+	}
+	i.addCache(ino)
+
+	return ino, nil
+}
+
+func (i *InodePool) seekInode(base *Inode, inoIdx int32) (*Inode, error) {
+	start := int32(base.Start)
+	distance := inoIdx - start
+	if distance == 0 {
+		return base, nil
+	}
+
+	if distance < 32 {
+		// TODO: can found in scatter
+	}
+
+	for {
+		newIno, err := i.getPrevInode(base, distance)
+		if err != nil {
+			return nil, err
+		}
+		if int32(newIno.Start) == inoIdx {
+			return newIno, nil
+		}
+		base = newIno
 	}
 }
 
@@ -39,7 +119,7 @@ func (i *InodePool) RefPayloadBlock() (*Inode, int, error) {
 	if err != nil {
 		return nil, -1, logex.Trace(err)
 	}
-	idx := inode.GetOffsetIdx()
+	idx := inode.GetSizeIdx()
 	if idx <= len(inode.Offsets)-1 {
 		return inode, idx, nil
 	}
@@ -53,26 +133,16 @@ func (i *InodePool) getInPool(addr Address) *Inode {
 }
 
 func (i *InodePool) setPrevs(inode *Inode) error {
-	pair := []struct {
-		addr **Address
-		idx  int
-	}{
-		{&inode.Prev, 0},
-		{&inode.Prev2, 1},
-		{&inode.Prev4, 3},
-		{&inode.Prev8, 7},
-		{&inode.Prev16, 15},
-		{&inode.Prev32, 31},
-	}
-	for _, p := range pair {
-		ino, err := i.getInScatter(p.idx)
+	pair := []int{0, 1, 3, 7, 15, 31}
+	for idx, sIdx := range pair {
+		ino, err := i.getInScatter(sIdx)
 		if err != nil {
 			return err
 		}
 		if ino == nil {
 			break
 		}
-		*p.addr = &ino.addr
+		inode.PrevInode[idx] = &ino.addr
 	}
 	return nil
 }
@@ -81,16 +151,16 @@ func (i *InodePool) OnFlush(ino *Inode, addr Address) {
 	if ino.addr == addr {
 		return
 	}
-	i.pool[addr] = ino
 	oldAddr := ino.addr
 	ino.addr.Set(addr)
+	i.addCache(ino)
 	delete(i.pool, oldAddr)
 }
 
 func (i *InodePool) InitInode() *Inode {
 	ret := NewInode(i.ino)
 	ret.addr.SetMem(unsafe.Pointer(ret))
-	i.pool[ret.addr] = ret
+	i.addCache(ret)
 	i.scatter.Push(ret)
 	return ret
 }
@@ -103,7 +173,7 @@ func (i *InodePool) next(lastest *Inode) *Inode {
 	i.setPrevs(ret)
 
 	ret.addr.SetMem(unsafe.Pointer(ret))
-	i.pool[ret.addr] = ret
+	i.addCache(ret)
 
 	i.scatter.Push(ret)
 	return ret
@@ -122,9 +192,14 @@ func (i *InodePool) GetByAddr(addr Address) (*Inode, error) {
 		if err != nil {
 			return nil, logex.Trace(err)
 		}
-		i.pool[addr] = ino
+		i.addCache(ino)
 	}
 	return ino, nil
+}
+
+func (p *InodePool) addCache(i *Inode) {
+	p.pool[i.addr] = i
+	p.offsetInode[int32(i.Start)] = i
 }
 
 // try to load inode one by one into memory
@@ -149,7 +224,7 @@ func (i *InodePool) getInScatter(n int) (*Inode, error) {
 				if i.scatter[k+1].Start == 0 {
 					break
 				}
-				addr := i.scatter[k+1].Prev
+				addr := i.scatter[k+1].PrevInode[0]
 				if addr.IsInMem() {
 					panic("can't be in mem")
 				}

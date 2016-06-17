@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"sync"
 	"time"
 
 	"github.com/chzyer/flow"
@@ -18,8 +19,10 @@ type Flusher struct {
 	offset   int64 // point to the start of partial
 	delegate FlushDelegate
 
-	flushChan chan struct{}
-	opChan    chan *flusherWriteOp
+	flushChan   chan struct{}
+	flushWaiter sync.WaitGroup
+
+	opChan chan *flusherWriteOp
 }
 
 type FlusherConfig struct {
@@ -71,9 +74,12 @@ func (f *Flusher) handleOpInPartialArea(dw *DiskWriter, op *flusherWriteOp) erro
 }
 
 func (f *Flusher) Flush() {
+	f.flushWaiter.Add(1)
 	select {
 	case f.flushChan <- struct{}{}:
+		f.flushWaiter.Wait()
 	default:
+		f.flushWaiter.Done()
 	}
 }
 
@@ -93,7 +99,6 @@ writePayload:
 	}
 
 	dataAddr = ShortAddr(f.getAddr(dw.Written()))
-
 	blkSize := ino.GetBlockSize(idx)
 	if blkSize > 0 {
 		oldData, err := f.delegate.ReadData(ino.Offsets[idx], blkSize)
@@ -219,6 +224,7 @@ func (f *Flusher) loop() {
 		timer = time.NewTimer(0)
 	)
 	timer.Stop()
+	wantFlush := false
 
 loop:
 	for {
@@ -227,19 +233,33 @@ loop:
 			fb.addOp(op)
 			timer.Reset(f.interval)
 
-		buffering:
-			for {
-				select {
-				case <-timer.C:
-					break buffering
-				case <-f.flushChan:
-					break buffering
-				case op := <-f.opChan:
-					fb.addOp(op)
+			if !wantFlush {
+			buffering:
+				for {
+					select {
+					case <-timer.C:
+						break buffering
+					case <-f.flushChan:
+						wantFlush = true
+						break buffering
+					case op := <-f.opChan:
+						fb.addOp(op)
+					}
 				}
 			}
 
 			f.flush(&fb)
+			if wantFlush {
+				f.flushWaiter.Done()
+				wantFlush = false
+			}
+		case <-f.flushChan:
+			if len(f.opChan) != 0 {
+				wantFlush = true
+			} else {
+				f.flushWaiter.Done()
+			}
+
 		case <-f.flow.IsClose():
 			break loop
 		}

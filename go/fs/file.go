@@ -1,7 +1,9 @@
 package fs
 
 import (
+	"io"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/chzyer/flow"
@@ -22,12 +24,14 @@ type File struct {
 	flushInterval time.Duration
 	flusher       FileFlusher
 
-	flushChan chan struct{}
-	writeChan chan *fileWriteOp
+	flushWaiter sync.WaitGroup
+	flushChan   chan struct{}
+	writeChan   chan *fileWriteOp
 }
 
 type FileDelegater interface {
 	InodePoolDelegate
+	ReadData(offset ShortAddr, n int) ([]byte, error)
 }
 
 type FileFlusher interface {
@@ -83,7 +87,8 @@ func (f *File) writeLoop() {
 	timer.Stop()
 
 	var buffer []byte
-	var flushReply = make(chan error)
+	var flushReply = make(chan error, 1)
+	var wantFlush bool
 
 loop:
 	for {
@@ -91,38 +96,100 @@ loop:
 		case op := <-f.writeChan:
 			buffer = append(buffer, op.b...)
 			op.reply <- nil
-
 			timer.Reset(f.flushInterval)
-		buffering:
-			for {
-				select {
-				case <-timer.C:
-					break buffering
-				case <-f.flushChan:
-					break buffering
-				case op := <-f.writeChan:
-					buffer = append(buffer, op.b...)
-					op.reply <- nil
+
+			if !wantFlush {
+			buffering:
+				for {
+					select {
+					case <-timer.C:
+						break buffering
+					case <-f.flushChan:
+						wantFlush = true
+						break buffering
+					case <-f.flow.IsClose():
+						break buffering
+					case op := <-f.writeChan:
+						buffer = append(buffer, op.b...)
+						op.reply <- nil
+					}
 				}
 			}
 
 			f.flusher.WriteByInode(f.inodePool, buffer, flushReply)
+			if wantFlush {
+				f.flushWaiter.Done()
+				wantFlush = false
+			}
+			buffer = buffer[:0]
+		case <-f.flushChan:
+			if len(f.writeChan) != 0 {
+				wantFlush = true
+			} else {
+				f.flushWaiter.Done()
+			}
 		case err := <-flushReply:
 			// send to Write() ?
-			logex.Error("write error:", err)
+			if err != nil {
+				logex.Error("write error:", err)
+			}
 		case <-f.flow.IsClose():
 			break loop
 		}
 	}
 }
 
-func (f *File) ReadAt(b []byte, off int64) (int, error) {
-	return 0, nil
+func (f *File) Size() int64 {
+	ino, err := f.inodePool.GetLastest()
+	if err != nil {
+		panic(err)
+	}
+	return int64(ino.Start)*BlockSize + int64(ino.Size)
+}
+
+func (f *File) ReadAt(b []byte, off int64) (readBytes int, err error) {
+	inode, err := f.inodePool.SeekPrev(off)
+	if err != nil {
+		return 0, err
+	}
+
+	var nextInode *Inode
+
+getOffset:
+	idx, ok := inode.SeekIdx(off)
+	if !ok {
+		nextInode, err = f.inodePool.SeekNext(inode)
+		if err != nil {
+			return
+		}
+		inode = nextInode
+		goto getOffset
+	}
+
+	remainBytes := inode.GetRemainInBlock(off)
+	data, err := f.delegate.ReadData(inode.Offsets[idx], remainBytes)
+	if err != nil {
+		return
+	}
+
+	if len(data) != remainBytes {
+		err = io.EOF
+		return
+	}
+
+	readBytes += copy(b[readBytes:], data)
+	if readBytes == len(b) {
+		return
+	}
+	off += int64(readBytes)
+
+	goto getOffset
 }
 
 func (f *File) Write(b []byte) (int, error) {
 	op := &fileWriteOp{
-		b: b, reply: make(chan error),
+		b:     b,
+		reply: make(chan error),
 	}
 	f.writeChan <- op
 	err := <-op.reply
@@ -132,15 +199,37 @@ func (f *File) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func (f *File) Flush() {
+func (f *File) Sync() {
+	f.flushWaiter.Add(1)
 	select {
 	case f.flushChan <- struct{}{}:
+		f.flushWaiter.Wait()
 	default:
+		f.flushWaiter.Done()
 	}
+
 	f.flusher.Flush()
 }
 
 func (f *File) Close() error {
 	f.flow.Close()
 	return nil
+}
+
+type FileReader struct {
+	*File
+	offset int64
+}
+
+func NewFileReader(f *File, off int64) *FileReader {
+	return &FileReader{
+		File:   f,
+		offset: off,
+	}
+}
+
+func (f *FileReader) Read(b []byte) (int, error) {
+	n, err := f.File.ReadAt(b, f.offset)
+	f.offset += int64(n)
+	return n, err
 }
