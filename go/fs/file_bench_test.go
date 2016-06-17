@@ -12,7 +12,8 @@ func BenchmarkFile(b *testing.B) {
 
 	fd, err := bio.NewFile(test.Root())
 	test.Nil(err)
-	f := testNewFile(fd)
+	_ = fd
+	f := testNewFile(test.NewMemDisk())
 	defer f.Close()
 
 	const size = 1028

@@ -127,7 +127,6 @@ loop:
 				f.flusher.Flush()
 				select {
 				case <-flushReply:
-					// 这里阻塞了接收
 					needReply = false
 				case <-f.flow.IsClose():
 					break loop
@@ -158,8 +157,6 @@ loop:
 		}
 	}
 }
-
-var jjj = false
 
 func (f *File) Size() int64 {
 	ino, err := f.inodePool.GetLastest()
@@ -216,15 +213,12 @@ getOffset:
 }
 
 func (f *File) Write(b []byte) (int, error) {
-
 	op := &fileWriteOp{
 		b:     b,
 		reply: make(chan error),
 	}
 	f.writeChan <- op
-
 	err := <-op.reply
-
 	if err != nil {
 		return 0, err
 	}
