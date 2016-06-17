@@ -28,7 +28,7 @@ func CalNeedInodeCnt(ino *Inode, n int) int {
 	if int(InodeCap-ino.Size) > n {
 		return 1
 	}
-	n -= int(ino.Size)
+	n -= int(InodeCap - ino.Size)
 	if n%InodeCap == 0 {
 		return (n / InodeCap) + 1
 	}

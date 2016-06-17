@@ -3,13 +3,16 @@ package fs
 import (
 	"testing"
 
+	"github.com/chzyer/madq/go/bio"
 	"github.com/chzyer/test"
 )
 
 func BenchmarkFile(b *testing.B) {
 	defer test.New(b)
 
-	f := testNewFile(test.NewMemDisk())
+	fd, err := bio.NewFile(test.Root())
+	test.Nil(err)
+	f := testNewFile(fd)
 	defer f.Close()
 
 	const size = 1028

@@ -74,8 +74,6 @@ func (i *Inode) GetBlockSize(idx int) int {
 	return BlockSize
 }
 
-// func (i *Inode) GetOffsetIdx()
-
 func (i *Inode) GetSizeIdx() int {
 	// 256k per Offset
 	return int(i.Size) >> BlockBit

@@ -22,6 +22,7 @@ type File struct {
 	delegate      FileDelegater
 	inodePool     *InodePool
 	flushInterval time.Duration
+	flushSize     int
 	flusher       FileFlusher
 
 	flushWaiter sync.WaitGroup
@@ -45,6 +46,7 @@ type FileConfig struct {
 	Delegate      FileDelegater
 	FlushInterval time.Duration
 	FileFlusher   FileFlusher
+	FlushSize     int
 }
 
 func NewFile(f *flow.Flow, cfg *FileConfig) (*File, error) {
@@ -67,6 +69,7 @@ func NewFile(f *flow.Flow, cfg *FileConfig) (*File, error) {
 		flushInterval: cfg.FlushInterval,
 		inodePool:     inodePool,
 		flusher:       cfg.FileFlusher,
+		flushSize:     cfg.FlushSize,
 
 		flushChan: make(chan struct{}, 1),
 		writeChan: make(chan *fileWriteOp, 8),
@@ -97,8 +100,8 @@ loop:
 		case op := <-f.writeChan:
 			buffer = append(buffer, op.b...)
 			op.reply <- nil
-			timer.Reset(f.flushInterval)
 
+			timer.Reset(f.flushInterval)
 			if !wantFlush {
 			buffering:
 				for {
@@ -113,13 +116,18 @@ loop:
 					case op := <-f.writeChan:
 						buffer = append(buffer, op.b...)
 						op.reply <- nil
+						if f.flushSize > 0 && len(buffer) > f.flushSize {
+							break buffering
+						}
 					}
 				}
 			}
 
 			if needReply {
+				f.flusher.Flush()
 				select {
 				case <-flushReply:
+					// 这里阻塞了接收
 					needReply = false
 				case <-f.flow.IsClose():
 					break loop
@@ -150,6 +158,8 @@ loop:
 		}
 	}
 }
+
+var jjj = false
 
 func (f *File) Size() int64 {
 	ino, err := f.inodePool.GetLastest()
@@ -206,12 +216,15 @@ getOffset:
 }
 
 func (f *File) Write(b []byte) (int, error) {
+
 	op := &fileWriteOp{
 		b:     b,
 		reply: make(chan error),
 	}
 	f.writeChan <- op
+
 	err := <-op.reply
+
 	if err != nil {
 		return 0, err
 	}

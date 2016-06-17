@@ -58,6 +58,7 @@ func testNewFile(md bio.ReadWriterAt) *File {
 		Flags:         os.O_CREATE,
 		Delegate:      delegate,
 		FlushInterval: time.Second,
+		FlushSize:     20 << 20,
 		FileFlusher:   flusher,
 	})
 	test.Nil(err)
@@ -203,14 +204,8 @@ func TestFileBigWrite(t *testing.T) {
 	for i := 0; i < total; i++ {
 		_, err := f.Write(data)
 		test.Nil(err)
-		switch i {
-		case 220000, 223000:
-			f.Sync()
-			println("done", i)
-		}
 	}
 	f.Sync()
-
 }
 
 func TestFileBigRW2(t *testing.T) {
