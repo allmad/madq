@@ -52,13 +52,16 @@ func (f *Flusher) handleOpInPartialArea(dw *DiskWriter, op *flusherWriteOp) erro
 			"error in fetch inode(%v): %v", op.inoPool.ino, err)
 	}
 
-	dataAddr := ShortAddr(f.getAddr(dw.Written()))
 	blkSize := ino.GetBlockSize(idx)
+	dataAddr := ShortAddr(f.getAddr(dw.Written()))
+
 	if blkSize > 0 {
+		// ino.Offsets[idx] maybe in memory
 		oldData, err := f.delegate.ReadData(ino.Offsets[idx], blkSize)
 		if err != nil {
 			return logex.Tracefmt(
-				"error in readdata at %v: %v", ino.Offsets[idx], err)
+				"error in readdata at %v(%v): %v",
+				ino.Offsets[idx], blkSize, err)
 		}
 		dw.WriteBytes(oldData)
 	}
@@ -100,6 +103,10 @@ writePayload:
 
 	dataAddr = ShortAddr(f.getAddr(dw.Written()))
 	blkSize := ino.GetBlockSize(idx)
+	if len(op.data) < BlockSize-blkSize {
+		goto exit
+	}
+
 	if blkSize > 0 {
 		oldData, err := f.delegate.ReadData(ino.Offsets[idx], blkSize)
 		if err != nil {
@@ -107,10 +114,6 @@ writePayload:
 				"error in readdata at %v: %v", ino.Offsets[idx], err)
 		}
 		dw.WriteBytes(oldData)
-	}
-
-	if len(op.data) < BlockSize-blkSize {
-		goto exit
 	}
 
 	dw.WriteBytes(op.data[:BlockSize-blkSize])
@@ -300,14 +303,17 @@ type flushBuffer struct {
 }
 
 func (f *flushBuffer) addOp(op *flusherWriteOp) {
+	// if multiple op belong to same file?
 	f.bufferingOps = append(f.bufferingOps, op)
-	f.bufferingSize += len(op.data) + GetBlockCnt(len(op.data))*InodeSize
 	ino, err := op.inoPool.GetLastest()
 	if err != nil {
 		panic("can not get lastest")
 	}
-	f.bufferingSize += int(ino.Size) & (BlockSize - 1)
+
 	// calculate the copy of partial data
+	f.bufferingSize += len(op.data) +
+		CalNeedInodeCnt(ino, len(op.data))*InodeSize +
+		int(ino.Size)&(BlockSize-1)
 }
 
 func (f *flushBuffer) alloc() []byte {

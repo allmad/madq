@@ -89,6 +89,7 @@ func (f *File) writeLoop() {
 	var buffer []byte
 	var flushReply = make(chan error, 1)
 	var wantFlush bool
+	var needReply bool
 
 loop:
 	for {
@@ -116,7 +117,17 @@ loop:
 				}
 			}
 
+			if needReply {
+				select {
+				case <-flushReply:
+					needReply = false
+				case <-f.flow.IsClose():
+					break loop
+				}
+			}
+
 			f.flusher.WriteByInode(f.inodePool, buffer, flushReply)
+			needReply = true
 			if wantFlush {
 				f.flushWaiter.Done()
 				wantFlush = false
@@ -129,6 +140,7 @@ loop:
 				f.flushWaiter.Done()
 			}
 		case err := <-flushReply:
+			needReply = false
 			// send to Write() ?
 			if err != nil {
 				logex.Error("write error:", err)

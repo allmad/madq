@@ -7,13 +7,14 @@ import (
 	"time"
 
 	"github.com/chzyer/flow"
+	"github.com/chzyer/madq/go/bio"
 	"github.com/chzyer/test"
 )
 
 type testFileDelegate struct {
 	ino     int32
 	lastest *Inode
-	md      *test.MemDisk
+	md      bio.ReadWriterAt
 }
 
 func (t *testFileDelegate) ReadData(addr ShortAddr, n int) ([]byte, error) {
@@ -42,8 +43,7 @@ func (t *testFileDelegate) GetInodeByAddr(addr Address) (*Inode, error) {
 	return ino, nil
 }
 
-func testNewFile() (*File, *test.MemDisk) {
-	md := test.NewMemDisk()
+func testNewFile(md bio.ReadWriterAt) *File {
 	delegate := &testFileDelegate{md: md}
 	flusherDelegate := &testFlusherDelegate{md: md}
 
@@ -61,13 +61,14 @@ func testNewFile() (*File, *test.MemDisk) {
 		FileFlusher:   flusher,
 	})
 	test.Nil(err)
-	return f, md
+	return f
 }
 
 func TestFileWrite(t *testing.T) {
 	defer test.New(t)
 
-	f, md := testNewFile()
+	md := test.NewMemDisk()
+	f := testNewFile(md)
 	defer f.Close()
 
 	out := 5
@@ -130,7 +131,7 @@ func TestFileWrite(t *testing.T) {
 func TestFileRead(t *testing.T) {
 	defer test.New(t)
 
-	f, _ := testNewFile()
+	f := testNewFile(test.NewMemDisk())
 	defer f.Close()
 
 	out := 5
@@ -155,7 +156,7 @@ func TestFileRead(t *testing.T) {
 func TestFile(t *testing.T) {
 	defer test.New(t)
 
-	f, _ := testNewFile()
+	f := testNewFile(test.NewMemDisk())
 	defer f.Close()
 
 	test.Write(f, []byte("hello"))
@@ -164,18 +165,69 @@ func TestFile(t *testing.T) {
 	test.ReadStringAt(f, 0, "hello")
 }
 
-func TestFileBigRW(t *testing.T) {
+func TestFileBigRW1(t *testing.T) {
 	defer test.New(t)
-	f, _ := testNewFile()
+	md := test.NewMemDisk()
+	f := testNewFile(md)
 	defer f.Close()
 
 	testSize := 256<<10 + 5
 	buf := test.SeqBytes(testSize)
-	testTime := 1000
+	testTime := 2000
 	for i := 0; i < testTime; i++ {
+		// test.MarkLine()
 		test.Write(f, buf)
 		f.Sync()
 	}
+
+	test.Mark("fileSize")
+	test.Equal(f.Size(), testSize*testTime)
+
+	fr := NewFileReader(f, 0)
+	for i := 0; i < testTime; i++ {
+		test.Mark("read ", i)
+		test.ReadAndCheck(fr, buf)
+	}
+}
+
+func TestFileBigWrite(t *testing.T) {
+	defer test.New(t)
+	md := test.NewMemDisk()
+	f := testNewFile(md)
+	defer f.Close()
+
+	const size = 1028
+	data := test.RandBytes(size)
+	total := 230000
+
+	for i := 0; i < total; i++ {
+		_, err := f.Write(data)
+		test.Nil(err)
+		switch i {
+		case 220000, 223000:
+			f.Sync()
+			println("done", i)
+		}
+	}
+	f.Sync()
+
+}
+
+func TestFileBigRW2(t *testing.T) {
+	defer test.New(t)
+	md := test.NewMemDisk()
+	f := testNewFile(md)
+	defer f.Close()
+
+	testSize := 1048
+	buf := test.SeqBytes(testSize)
+	testTime := 10000
+	for i := 0; i < testTime; i++ {
+		// test.MarkLine()
+		test.Write(f, buf)
+		f.Sync()
+	}
+
 	test.Mark("fileSize")
 	test.Equal(f.Size(), testSize*testTime)
 

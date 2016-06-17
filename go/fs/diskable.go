@@ -162,7 +162,7 @@ func (w *DiskWriter) WriteBytes(b []byte) {
 	n := len(b)
 	nw := copy(w.b[w.offset:], b)
 	if n != nw {
-		panic("not enough memory space")
+		panic(fmt.Sprintf("not enough memory space: %v", n-nw))
 	}
 	w.offset += n
 }

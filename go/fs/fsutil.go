@@ -6,12 +6,12 @@ const (
 )
 
 func MakeRoom(b []byte, n int) []byte {
-	for {
-		if n <= cap(b)-len(b) {
-			return b[:n]
-		}
-		b = append(b, 0)
+	if n <= cap(b)-len(b) {
+		return b[:n]
 	}
+	newBuf := make([]byte, n+1)
+	copy(newBuf, b)
+	return newBuf
 }
 
 func GetInodeIdx(offset int64) int32 {
@@ -21,6 +21,18 @@ func GetInodeIdx(offset int64) int32 {
 
 func GetBlockIdx(offset int64) int32 {
 	return int32(offset >> BlockBit)
+}
+
+// n: append data size
+func CalNeedInodeCnt(ino *Inode, n int) int {
+	if int(InodeCap-ino.Size) > n {
+		return 1
+	}
+	n -= int(ino.Size)
+	if n%InodeCap == 0 {
+		return (n / InodeCap) + 1
+	}
+	return (n / InodeCap) + 2
 }
 
 func GetBlockCnt(n int) int {
