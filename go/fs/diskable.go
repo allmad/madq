@@ -29,6 +29,15 @@ type DiskReadItem interface {
 	ReadDisk([]byte) error
 }
 
+func ReadDisk(r io.ReaderAt, d Diskable, addr Address) error {
+	buf := make([]byte, d.DiskSize())
+	_, err := r.ReadAt(buf, int64(addr))
+	if err != nil {
+		return logex.Trace(err)
+	}
+	return logex.Trace(d.ReadDisk(buf))
+}
+
 // -----------------------------------------------------------------------------
 
 type DiskBuffer struct {

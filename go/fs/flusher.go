@@ -170,6 +170,8 @@ func (f *Flusher) handleOps(data []byte, ops []*flusherWriteOp) int64 {
 		}
 	}
 
+	// send reply to ops in flush()
+
 	dw.WriteBytes(MagicEOF)
 	return dw.Written()
 }
@@ -187,6 +189,9 @@ flush:
 		switch f.flow.CloseOrWait(time.Second) {
 		case flow.F_CLOSED:
 			for _, op := range fb.ops() {
+				if op == nil {
+					continue
+				}
 				op.done <- logex.Trace(err)
 			}
 			fb.reset()
@@ -198,6 +203,9 @@ flush:
 
 	f.offset += int64(len(buffer))
 	for _, op := range fb.ops() {
+		if op == nil {
+			continue
+		}
 		op.done <- nil
 	}
 	fb.reset()
