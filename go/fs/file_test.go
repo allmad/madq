@@ -43,7 +43,7 @@ func (t *testFileDelegate) GetInodeByAddr(addr Address) (*Inode, error) {
 }
 
 func testNewFile() (*File, *test.MemDisk) {
-	md := test.NewMemDisk(0)
+	md := test.NewMemDisk()
 	delegate := &testFileDelegate{md: md}
 	flusherDelegate := &testFlusherDelegate{md: md}
 
@@ -136,7 +136,7 @@ func TestFileRead(t *testing.T) {
 	out := 5
 	testSize := BlockSize + out
 	buf := test.SeqBytes(testSize)
-	testTime := 3
+	testTime := 10
 	for i := 0; i < testTime; i++ {
 		test.Write(f, buf)
 		f.Sync()
@@ -145,13 +145,10 @@ func TestFileRead(t *testing.T) {
 
 	fr := NewFileReader(f, 0)
 	for i := 0; i < testTime; i++ {
+		// test.MarkLine()
 		test.Mark(i)
 		test.ReadAndCheck(fr, buf)
 	}
-
-	// go/fs/file_test.go:150: [info:2] equal [262149]byte in [0, 16]:
-	//     [251 252 253 254 255 0 1 2 3 4 0 1 2 3 4 5]
-	//     [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15]
 
 }
 
@@ -174,7 +171,7 @@ func TestFileBigRW(t *testing.T) {
 
 	testSize := 256<<10 + 5
 	buf := test.SeqBytes(testSize)
-	testTime := 10
+	testTime := 1000
 	for i := 0; i < testTime; i++ {
 		test.Write(f, buf)
 		f.Sync()

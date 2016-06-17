@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"fmt"
 	"unsafe"
 
 	"github.com/chzyer/logex"
@@ -23,7 +24,7 @@ type InodePool struct {
 	pool     map[Address]*Inode
 
 	// cache for seek
-	offsetInode map[int32]*Inode
+	offsetInode map[int32]*Inode // inoIdx => Inode
 }
 
 func NewInodePool(ino int32, delegate InodePoolDelegate) *InodePool {
@@ -36,7 +37,7 @@ func NewInodePool(ino int32, delegate InodePoolDelegate) *InodePool {
 }
 
 func (i *InodePool) SeekNext(inode *Inode) (*Inode, error) {
-	return i.seekPrev(int64(inode.Start*BlockSize + InodeSize))
+	return i.seekPrev(int64(inode.Start*BlockSize + InodeCap))
 }
 
 func (i *InodePool) SeekPrev(offset int64) (*Inode, error) {
@@ -44,7 +45,7 @@ func (i *InodePool) SeekPrev(offset int64) (*Inode, error) {
 }
 
 func (i *InodePool) seekPrev(offset int64) (*Inode, error) {
-	inoIdx := GetInodeIdx(offset) // wrong
+	inoIdx := GetInodeIdx(offset)
 	if inode := i.offsetInode[inoIdx]; inode != nil {
 		return inode, nil
 	}
@@ -64,6 +65,9 @@ func (i *InodePool) seekPrev(offset int64) (*Inode, error) {
 func (i *InodePool) getPrevInode(ino *Inode, n int32) (*Inode, error) {
 	if n == 0 {
 		return ino, nil
+	}
+	if n < 0 {
+		panic(fmt.Sprint("distance < 0: ", n))
 	}
 
 	addr := *ino.PrevInode[inodeOffsetIdx[n]]
@@ -87,15 +91,13 @@ func (i *InodePool) getPrevInode(ino *Inode, n int32) (*Inode, error) {
 }
 
 func (i *InodePool) seekInode(base *Inode, inoIdx int32) (*Inode, error) {
-	start := int32(base.Start)
+	start := int32(base.Start / InodeBlockCnt)
 	distance := inoIdx - start
 	if distance == 0 {
 		return base, nil
 	}
 
-	if distance < 32 {
-		// TODO: can found in scatter
-	}
+	// TODO: try to found in scatter
 
 	for {
 		newIno, err := i.getPrevInode(base, distance)
@@ -167,8 +169,9 @@ func (i *InodePool) InitInode() *Inode {
 
 func (i *InodePool) next(lastest *Inode) *Inode {
 	ret := &Inode{
-		Ino:   lastest.Ino,
-		Start: lastest.Start + Int32(len(lastest.Offsets)),
+		Ino:       lastest.Ino,
+		Start:     lastest.Start + Int32(len(lastest.Offsets)),
+		PrevInode: emptyPrevs,
 	}
 	i.setPrevs(ret)
 
@@ -199,7 +202,7 @@ func (i *InodePool) GetByAddr(addr Address) (*Inode, error) {
 
 func (p *InodePool) addCache(i *Inode) {
 	p.pool[i.addr] = i
-	p.offsetInode[int32(i.Start)] = i
+	p.offsetInode[int32(i.Start/InodeBlockCnt)] = i
 }
 
 // try to load inode one by one into memory

@@ -162,12 +162,19 @@ getOffset:
 		if err != nil {
 			return
 		}
+		if inode == nextInode {
+			panic("SeekNext() is not working")
+		}
 		inode = nextInode
 		goto getOffset
 	}
 
 	remainBytes := inode.GetRemainInBlock(off)
-	data, err := f.delegate.ReadData(inode.Offsets[idx], remainBytes)
+	if remainBytes < len(b)-readBytes {
+		remainBytes = len(b) - readBytes
+	}
+	readAddr := inode.Offsets[idx] + ShortAddr(off&(BlockSize-1))
+	data, err := f.delegate.ReadData(readAddr, remainBytes)
 	if err != nil {
 		return
 	}

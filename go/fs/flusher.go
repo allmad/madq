@@ -302,6 +302,12 @@ type flushBuffer struct {
 func (f *flushBuffer) addOp(op *flusherWriteOp) {
 	f.bufferingOps = append(f.bufferingOps, op)
 	f.bufferingSize += len(op.data) + GetBlockCnt(len(op.data))*InodeSize
+	ino, err := op.inoPool.GetLastest()
+	if err != nil {
+		panic("can not get lastest")
+	}
+	f.bufferingSize += int(ino.Size) & (BlockSize - 1)
+	// calculate the copy of partial data
 }
 
 func (f *flushBuffer) alloc() []byte {

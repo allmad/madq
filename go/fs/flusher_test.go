@@ -65,7 +65,7 @@ func (t *testInodePoolMemDiskDelegate) GetInodeByAddr(addr Address) (*Inode, err
 func TestFlusherBigRW(t *testing.T) {
 	defer test.New(t)
 
-	flusherDelegate := &testFlusherDelegate{test.NewMemDisk(0)}
+	flusherDelegate := &testFlusherDelegate{test.NewMemDisk()}
 	f := flow.New()
 	flusher := NewFlusher(f, &FlusherConfig{
 		Interval: time.Second,
@@ -89,7 +89,7 @@ func TestFlusherBigRW(t *testing.T) {
 func TestFlusher(t *testing.T) {
 	defer test.New(t)
 
-	flusherDelegate := &testFlusherDelegate{test.NewMemDisk(0)}
+	flusherDelegate := &testFlusherDelegate{test.NewMemDisk()}
 	f := flow.New()
 	flusher := NewFlusher(f, &FlusherConfig{
 		Interval: time.Second,

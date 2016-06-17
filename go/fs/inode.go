@@ -59,11 +59,11 @@ func (i *Inode) GetRemainInBlock(off int64) int {
 }
 
 func (i *Inode) GetBlockIdx(off int64) int {
-	off -= int64(i.Start) * BlockSize
-	if off > int64(i.Size) {
+	offInInode := off - (int64(i.Start) * BlockSize)
+	if offInInode > int64(i.Size) {
 		panic("off not in inode")
 	}
-	return int(off) >> BlockBit
+	return int(offInInode) >> BlockBit
 }
 
 func (i *Inode) GetBlockSize(idx int) int {
@@ -155,5 +155,5 @@ func (i *Inode) SeekIdx(offset int64) (int, bool) {
 		return -1, false
 	}
 
-	return int((offset & InodeCap) >> BlockBit), true
+	return int((offset % InodeCap) >> BlockBit), true
 }
