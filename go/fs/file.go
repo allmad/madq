@@ -28,6 +28,7 @@ type File struct {
 	flushWaiter sync.WaitGroup
 	flushChan   chan struct{}
 	writeChan   chan *fileWriteOp
+	replyPool   sync.Pool
 }
 
 type FileDelegater interface {
@@ -73,6 +74,11 @@ func NewFile(f *flow.Flow, cfg *FileConfig) (*File, error) {
 
 		flushChan: make(chan struct{}, 1),
 		writeChan: make(chan *fileWriteOp, 8),
+		replyPool: sync.Pool{
+			New: func() interface{} {
+				return make(chan error)
+			},
+		},
 	}
 	f.SetOnClose(func() {
 		file.Close()
@@ -213,12 +219,15 @@ getOffset:
 }
 
 func (f *File) Write(b []byte) (int, error) {
+
 	op := &fileWriteOp{
 		b:     b,
-		reply: make(chan error),
+		reply: f.replyPool.Get().(chan error),
 	}
 	f.writeChan <- op
 	err := <-op.reply
+	f.replyPool.Put(op.reply)
+
 	if err != nil {
 		return 0, err
 	}

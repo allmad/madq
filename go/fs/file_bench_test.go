@@ -17,9 +17,11 @@ func nBenchmarkFile102800(b *testing.B) {
 func benchFile(b *testing.B, size int) {
 	defer test.New(b)
 
+	// test.MarkLine()
 	// fd, err := bio.NewFile(test.Root())
-	// test.Nil(err)
-	f := testNewFile(test.NewMemDisk())
+	//test.Nil(err)
+	fd := test.NewMemDisk()
+	f := testNewFile(fd)
 	defer f.Close()
 
 	data := test.RandBytes(size)

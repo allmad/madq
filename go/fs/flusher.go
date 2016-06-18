@@ -226,6 +226,7 @@ func (f *Flusher) loop() {
 		fb    flushBuffer
 		timer = time.NewTimer(0)
 	)
+	fb.init()
 	timer.Stop()
 	wantFlush := false
 
@@ -290,6 +291,7 @@ func (f *Flusher) Close() {
 	close(f.opChan)
 
 	var fb flushBuffer
+	fb.init()
 	for op := range f.opChan {
 		fb.addOp(op)
 	}
@@ -300,6 +302,10 @@ type flushBuffer struct {
 	bufferingOps  []*flusherWriteOp
 	bufferingSize int
 	buffer        []byte
+}
+
+func (f *flushBuffer) init() {
+	f.buffer = make([]byte, 4<<20)
 }
 
 func (f *flushBuffer) addOp(op *flusherWriteOp) {

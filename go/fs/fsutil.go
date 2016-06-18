@@ -9,7 +9,8 @@ func MakeRoom(b []byte, n int) []byte {
 	if n <= cap(b)-len(b) {
 		return b[:n]
 	}
-	newBuf := make([]byte, n+1)
+
+	newBuf := make([]byte, n+1, 2*n)
 	copy(newBuf, b)
 	return newBuf
 }
