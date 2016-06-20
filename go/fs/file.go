@@ -93,51 +93,53 @@ func NewFile(f *flow.Flow, cfg *FileConfig) (*File, error) {
 func (f *File) writeLoop() {
 	defer f.flow.DoneAndClose()
 	var (
-		timer = time.NewTimer(time.Second)
+		wantFlush bool
+		needReply bool
+
+		flushReply = make(chan error, 1)
+		timer      = time.NewTimer(time.Second)
 	)
 	timer.Stop()
-
-	var flushReply = make(chan error, 1)
-	var wantFlush bool
-	var needReply bool
 
 loop:
 	for {
 		timer.Reset(f.flushInterval)
 
 		select {
+		case <-timer.C:
+			goto flush
 		case <-f.cobuf.IsFlush():
-			buffer := f.cobuf.GetData()
-			println(len(buffer))
-
-			if needReply {
-				f.flusher.Flush()
-				select {
-				case <-flushReply:
-					needReply = false
-				case <-f.flow.IsClose():
-					break loop
-				}
-			}
-
-			f.flusher.WriteByInode(f.inodePool, buffer, flushReply)
-			needReply = true
-			if wantFlush {
-				f.flushWaiter.Done()
-				wantFlush = false
-			}
-			buffer = buffer[:0]
+			goto flush
 		case <-f.flushChan:
 			wantFlush = true
 			f.cobuf.Flush()
 		case err := <-flushReply:
 			needReply = false
-			// send to Write() ?
 			if err != nil {
 				logex.Error("write error:", err)
 			}
 		case <-f.flow.IsClose():
 			break loop
+		}
+		continue
+
+	flush:
+		buffer := f.cobuf.GetData()
+
+		if needReply {
+			select {
+			case <-flushReply:
+				needReply = false
+			case <-f.flow.IsClose():
+				break loop
+			}
+		}
+
+		f.flusher.WriteByInode(f.inodePool, buffer, flushReply)
+		needReply = true
+		if wantFlush {
+			f.flushWaiter.Done()
+			wantFlush = false
 		}
 	}
 }

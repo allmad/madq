@@ -1,7 +1,6 @@
 package fs
 
 import (
-	"bytes"
 	"fmt"
 	"testing"
 	"time"
@@ -99,7 +98,7 @@ func TestFlusher(t *testing.T) {
 	{
 		ipool0 := NewInodePool(0, nil)
 		ipool0.InitInode()
-		done := make(chan error)
+		done := make(chan error, 1)
 		flusher.WriteByInode(ipool0, []byte("hello"), done)
 		flusher.Flush()
 		test.Nil(<-done)
@@ -114,8 +113,8 @@ func TestFlusher(t *testing.T) {
 		inode, err := ipool0.GetLastest()
 		test.Nil(err)
 		test.Equal(inode.Size, Int32(5))
-		done := make(chan error)
-		tmpdata := test.RandBytes((256 << 10) + 10)
+		done := make(chan error, 1)
+		tmpdata := test.SeqBytes((256 << 10) + 10)
 		flusher.WriteByInode(ipool0, tmpdata, done)
 		flusher.Flush()
 		test.Nil(<-done)
@@ -129,9 +128,9 @@ func TestFlusher(t *testing.T) {
 		gotBlock1 := make([]byte, len(block1))
 		gotBlock2 := make([]byte, len(block2))
 		test.ReadAt(delegate.md, gotBlock1, int64(inode.Offsets[0]))
-		test.True(bytes.Equal(gotBlock1, block1))
+		test.EqualBytes(gotBlock1, block1)
 		test.ReadAt(delegate.md, gotBlock2, int64(inode.Offsets[1]))
-		test.Equal(gotBlock2, block2)
+		test.EqualBytes(gotBlock2, block2)
 
 	}
 	flusher.Close()

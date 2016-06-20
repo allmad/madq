@@ -29,11 +29,10 @@ func benchFile(b *testing.B, size int) {
 	defer f.Close()
 
 	data := test.RandBytes(size)
-	ch := make(chan error)
 
 	for i := 0; i < b.N; i++ {
-		f.WriteData(data, ch)
-		test.Nil(<-ch)
+		_, err := f.Write(data)
+		test.Nil(err)
 		b.SetBytes(int64(size))
 	}
 	f.Sync()
