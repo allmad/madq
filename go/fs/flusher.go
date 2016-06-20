@@ -34,7 +34,7 @@ type FlusherConfig struct {
 func NewFlusher(f *flow.Flow, cfg *FlusherConfig) *Flusher {
 	flusher := &Flusher{
 		interval:  cfg.Interval,
-		opChan:    make(chan *flusherWriteOp, 8),
+		opChan:    make(chan *flusherWriteOp, 100),
 		flushChan: make(chan struct{}, 1),
 		offset:    cfg.Offset,
 		delegate:  cfg.Delegate,

@@ -94,9 +94,8 @@ func (f *File) writeLoop() {
 	defer f.flow.DoneAndClose()
 	var (
 		wantFlush bool
-		needReply bool
 
-		flushReply = make(chan error, 1)
+		flushReply = make(chan error, 100)
 		timer      = time.NewTimer(time.Second)
 	)
 	timer.Stop()
@@ -114,7 +113,6 @@ loop:
 			wantFlush = true
 			f.cobuf.Flush()
 		case err := <-flushReply:
-			needReply = false
 			if err != nil {
 				logex.Error("write error:", err)
 			}
@@ -125,18 +123,7 @@ loop:
 
 	flush:
 		buffer := f.cobuf.GetData()
-
-		if needReply {
-			select {
-			case <-flushReply:
-				needReply = false
-			case <-f.flow.IsClose():
-				break loop
-			}
-		}
-
 		f.flusher.WriteByInode(f.inodePool, buffer, flushReply)
-		needReply = true
 		if wantFlush {
 			f.flushWaiter.Done()
 			wantFlush = false
