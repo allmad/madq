@@ -24,6 +24,7 @@ type File struct {
 	flushInterval time.Duration
 	flushSize     int
 	flusher       FileFlusher
+	cobuf         *Cobuffer
 
 	flushWaiter sync.WaitGroup
 	flushChan   chan struct{}
@@ -95,7 +96,7 @@ func (f *File) writeLoop() {
 	)
 	timer.Stop()
 
-	var buffer []byte
+	var buffer = make([]byte, 0, 1<<20)
 	var flushReply = make(chan error, 1)
 	var wantFlush bool
 	var needReply bool
@@ -216,6 +217,13 @@ getOffset:
 	off += int64(readBytes)
 
 	goto getOffset
+}
+
+func (f *File) WriteData(b []byte, reply chan error) {
+	f.writeChan <- &fileWriteOp{
+		b:     b,
+		reply: reply,
+	}
 }
 
 func (f *File) Write(b []byte) (int, error) {

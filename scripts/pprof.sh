@@ -5,4 +5,4 @@ op=$1
 shift
 ops=$@
 
-go tool pprof $ops $pkg.test $op.prof
+go tool pprof $ops $pkg.test ${pkg}_${op}.prof
