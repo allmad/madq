@@ -72,6 +72,7 @@ func NewFile(f *flow.Flow, cfg *FileConfig) (*File, error) {
 		inodePool:     inodePool,
 		flusher:       cfg.FileFlusher,
 		flushSize:     cfg.FlushSize,
+		cobuf:         NewCobuffer(cfg.FlushSize, cfg.FlushSize),
 
 		flushChan: make(chan struct{}, 1),
 		writeChan: make(chan *fileWriteOp, 8),
@@ -96,39 +97,18 @@ func (f *File) writeLoop() {
 	)
 	timer.Stop()
 
-	var buffer = make([]byte, 0, 1<<20)
 	var flushReply = make(chan error, 1)
 	var wantFlush bool
 	var needReply bool
 
 loop:
 	for {
-		select {
-		case op := <-f.writeChan:
-			buffer = append(buffer, op.b...)
-			op.reply <- nil
+		timer.Reset(f.flushInterval)
 
-			timer.Reset(f.flushInterval)
-			if !wantFlush {
-			buffering:
-				for {
-					select {
-					case <-timer.C:
-						break buffering
-					case <-f.flushChan:
-						wantFlush = true
-						break buffering
-					case <-f.flow.IsClose():
-						break buffering
-					case op := <-f.writeChan:
-						buffer = append(buffer, op.b...)
-						op.reply <- nil
-						if f.flushSize > 0 && len(buffer) > f.flushSize {
-							break buffering
-						}
-					}
-				}
-			}
+		select {
+		case <-f.cobuf.IsFlush():
+			buffer := f.cobuf.GetData()
+			println(len(buffer))
 
 			if needReply {
 				f.flusher.Flush()
@@ -148,11 +128,8 @@ loop:
 			}
 			buffer = buffer[:0]
 		case <-f.flushChan:
-			if len(f.writeChan) != 0 {
-				wantFlush = true
-			} else {
-				f.flushWaiter.Done()
-			}
+			wantFlush = true
+			f.cobuf.Flush()
 		case err := <-flushReply:
 			needReply = false
 			// send to Write() ?
@@ -227,18 +204,7 @@ func (f *File) WriteData(b []byte, reply chan error) {
 }
 
 func (f *File) Write(b []byte) (int, error) {
-
-	op := &fileWriteOp{
-		b:     b,
-		reply: f.replyPool.Get().(chan error),
-	}
-	f.writeChan <- op
-	err := <-op.reply
-	f.replyPool.Put(op.reply)
-
-	if err != nil {
-		return 0, err
-	}
+	f.cobuf.WriteData(b)
 	return len(b), nil
 }
 
@@ -255,7 +221,12 @@ func (f *File) Sync() {
 }
 
 func (f *File) Close() error {
+	if !f.flow.MarkExit() {
+		return nil
+	}
+
 	f.flow.Close()
+	f.cobuf.Close()
 	return nil
 }
 

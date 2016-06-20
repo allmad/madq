@@ -154,7 +154,7 @@ func TestFileRead(t *testing.T) {
 
 }
 
-func TestFile(t *testing.T) {
+func TestFileBase(t *testing.T) {
 	defer test.New(t)
 
 	f := testNewFile(test.NewMemDisk())

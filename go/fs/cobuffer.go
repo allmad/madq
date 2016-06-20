@@ -38,16 +38,23 @@ exit:
 	return success
 }
 
+func (c *Cobuffer) Flush() {
+	select {
+	case c.flushChan <- struct{}{}:
+	default:
+	}
+}
+
 func (c *Cobuffer) IsFlush() chan struct{} {
 	return c.flushChan
 }
 
 func (c *Cobuffer) GetData() []byte {
 	c.rw.Lock()
-	n := len(c.buffer)
+	n := int(c.offset)
 	buf := make([]byte, n)
 
-	copy(buf, c.buffer[:c.offset])
+	copy(buf, c.buffer)
 	c.offset = 0
 	c.rw.Unlock()
 	return buf
