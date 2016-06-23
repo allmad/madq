@@ -12,6 +12,8 @@ type testInodePoolDelegate struct {
 	data    map[Address]*Inode
 }
 
+func (t *testInodePoolDelegate) SaveInode(ino *Inode) {}
+
 func (t *testInodePoolDelegate) GetInode(ino int32) (*Inode, error) {
 	if t.lastest != nil {
 		return t.lastest, nil

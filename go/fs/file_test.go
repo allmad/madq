@@ -26,6 +26,10 @@ func (t *testFileDelegate) ReadData(addr ShortAddr, n int) ([]byte, error) {
 	return buf, nil
 }
 
+func (t *testFileDelegate) SaveInode(ino *Inode) {
+
+}
+
 func (t *testFileDelegate) GetInode(ino int32) (*Inode, error) {
 	t.ino = ino
 	var err error

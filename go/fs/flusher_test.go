@@ -44,6 +44,10 @@ type testInodePoolMemDiskDelegate struct {
 	md          bio.ReadWriterAt
 }
 
+func (t *testInodePoolMemDiskDelegate) SaveInode(ino *Inode) {
+
+}
+
 func (t *testInodePoolMemDiskDelegate) GetInode(ino int32) (*Inode, error) {
 	return t.GetInodeByAddr(t.lastestAddr)
 }
@@ -72,7 +76,7 @@ func TestFlusherBigRW(t *testing.T) {
 		Offset:   1,
 	})
 
-	ipool0 := NewInodePool(0, nil)
+	ipool0 := NewInodePool(0, &testInodePoolDelegate{})
 	ipool0.InitInode()
 	done := make(chan error, 1)
 	expect := test.SeqBytes(BlockSize + 5)
@@ -96,7 +100,7 @@ func TestFlusher(t *testing.T) {
 		Offset:   1,
 	})
 	{
-		ipool0 := NewInodePool(0, nil)
+		ipool0 := NewInodePool(0, &testInodePoolDelegate{})
 		ipool0.InitInode()
 		done := make(chan error, 1)
 		flusher.WriteByInode(ipool0, []byte("hello"), done)

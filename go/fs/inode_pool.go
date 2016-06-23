@@ -10,6 +10,7 @@ import (
 type InodePoolDelegate interface {
 	GetInode(ino int32) (*Inode, error)
 	GetInodeByAddr(addr Address) (*Inode, error)
+	SaveInode(inode *Inode)
 }
 
 var inodeOffsetIdx = initOffsetIdx()
@@ -173,6 +174,13 @@ func (p *InodePool) OnFlush(ino *Inode, addr Address) {
 		return
 	}
 	p.updateInodeAddr(ino, addr)
+	lastest := p.scatter.Top()
+	if ino == nil {
+		panic("top os scatter is nil")
+	}
+	if lastest == ino {
+		p.delegate.SaveInode(ino)
+	}
 }
 
 func (p *InodePool) updateInodeAddr(ino *Inode, addr Address) {
@@ -283,6 +291,10 @@ func (is *InodeScatter) Clean() {
 	for idx := range is {
 		is[idx] = nil
 	}
+}
+
+func (is *InodeScatter) Top() *Inode {
+	return (*is)[len(*is)-1]
 }
 
 func (is *InodeScatter) Push(i *Inode) {

@@ -15,7 +15,8 @@ func (m Magic) String() string {
 		name string
 	}{
 		{MagicEOF, "EOF"},
-		{MagicInode, "inode"},
+		{MagicVolume, "Volume"},
+		{MagicInode, "Inode"},
 	}
 
 	for _, i := range items {
@@ -28,6 +29,7 @@ func (m Magic) String() string {
 }
 
 var (
-	MagicEOF   = Magic{0x8a, 0x9b, 0x0, 0x1}
-	MagicInode = Magic{0x8a, 0x9b, 0x0, 0x2}
+	MagicEOF    = Magic{0x8a, 0x9b, 0x0, 0x1}
+	MagicVolume = Magic{0x8a, 0x9b, 0x0, 0x2}
+	MagicInode  = Magic{0x8a, 0x9b, 0x0, 0x3}
 )

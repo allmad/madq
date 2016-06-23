@@ -38,6 +38,16 @@ func ReadDisk(r io.ReaderAt, d Diskable, addr Address) error {
 	return logex.Trace(d.ReadDisk(buf))
 }
 
+func WriteDisk(w io.WriterAt, d Diskable, addr Address) error {
+	buf := make([]byte, d.DiskSize())
+	d.WriteDisk(buf)
+	_, err := w.WriteAt(buf, int64(addr))
+	if err != nil {
+		return logex.Trace(err)
+	}
+	return nil
+}
+
 // -----------------------------------------------------------------------------
 
 type DiskBuffer struct {

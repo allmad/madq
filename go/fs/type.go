@@ -68,6 +68,10 @@ var _ DiskItem = new(ShortAddr)
 
 type ShortAddr int64
 
+func (a ShortAddr) IsEmpty() bool {
+	return a == 0
+}
+
 func (ShortAddr) DiskSize() int { return 6 }
 
 func (a ShortAddr) WriteDisk(b []byte) {
