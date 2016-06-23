@@ -25,44 +25,60 @@ type InodePool struct {
 
 	// cache for seek
 	offsetInode map[int32]*Inode // inoIdx => Inode
+	nextInode   map[Address]*Inode
 }
 
 func NewInodePool(ino int32, delegate InodePoolDelegate) *InodePool {
-	return &InodePool{
-		ino:         ino,
-		delegate:    delegate,
-		pool:        make(map[Address]*Inode, 32),
-		offsetInode: make(map[int32]*Inode, 32),
+	p := &InodePool{
+		ino:      ino,
+		delegate: delegate,
 	}
+	p.ResetCache()
+	return p
 }
 
-func (i *InodePool) SeekNext(inode *Inode) (*Inode, error) {
-	return i.seekPrev(int64(inode.Start*BlockSize + InodeCap))
+func (p *InodePool) ResetCache() {
+	p.pool = make(map[Address]*Inode, 32)
+	p.offsetInode = make(map[int32]*Inode, 32)
+	p.nextInode = make(map[Address]*Inode, 32)
 }
 
-func (i *InodePool) SeekPrev(offset int64) (*Inode, error) {
-	return i.seekPrev(offset)
+func (p *InodePool) SeekNext(inode *Inode) (*Inode, error) {
+	if next := p.getNextInCache(inode); next != nil {
+		return next, nil
+	}
+	return p.seekPrev(int64(inode.Start*BlockSize + InodeCap))
 }
 
-func (i *InodePool) seekPrev(offset int64) (*Inode, error) {
+func (p *InodePool) SeekPrev(offset int64) (*Inode, error) {
+	return p.seekPrev(offset)
+}
+
+func (p *InodePool) getInoIdxInCache(inoIdx int32) *Inode {
+	ino := p.offsetInode[inoIdx]
+	Stat.Inode.Cache.InoIdxHit.HitIf(ino != nil)
+	return ino
+}
+
+func (p *InodePool) seekPrev(offset int64) (*Inode, error) {
 	inoIdx := GetInodeIdx(offset)
-	if inode := i.offsetInode[inoIdx]; inode != nil {
+	if inode := p.getInoIdxInCache(inoIdx); inode != nil {
 		return inode, nil
 	}
 
-	lastest, err := i.getInScatter(0)
+	lastest, err := p.getInScatter(0)
 	if err != nil {
 		return nil, logex.Trace(err)
 	}
 
-	ino, err := i.seekInode(lastest, inoIdx)
+	ino, err := p.seekInode(lastest, inoIdx)
 	if err != nil {
 		return nil, logex.Trace(err)
 	}
 	return ino, nil
 }
 
-func (i *InodePool) getPrevInode(ino *Inode, n int32) (*Inode, error) {
+func (p *InodePool) getPrevInode(ino *Inode, n int32) (*Inode, error) {
 	if n == 0 {
 		return ino, nil
 	}
@@ -71,7 +87,7 @@ func (i *InodePool) getPrevInode(ino *Inode, n int32) (*Inode, error) {
 	}
 
 	addr := *ino.PrevInode[inodeOffsetIdx[n]]
-	if ino := i.pool[addr]; ino != nil {
+	if ino := p.pool[addr]; ino != nil {
 		return ino, nil
 	}
 	if addr.IsInMem() {
@@ -81,16 +97,17 @@ func (i *InodePool) getPrevInode(ino *Inode, n int32) (*Inode, error) {
 		panic("addr is empty")
 	}
 
-	ino, err := i.delegate.GetInodeByAddr(addr)
+	Stat.Inode.ReadDisk.Add(1)
+	ino, err := p.delegate.GetInodeByAddr(addr)
 	if err != nil {
 		return nil, err
 	}
-	i.addCache(ino)
+	p.addCache(ino)
 
 	return ino, nil
 }
 
-func (i *InodePool) seekInode(base *Inode, inoIdx int32) (*Inode, error) {
+func (p *InodePool) seekInode(base *Inode, inoIdx int32) (*Inode, error) {
 	start := int32(base.Start / InodeBlockCnt)
 	distance := inoIdx - start
 	if distance == 0 {
@@ -99,25 +116,27 @@ func (i *InodePool) seekInode(base *Inode, inoIdx int32) (*Inode, error) {
 
 	// TODO: try to found in scatter
 
-	for {
-		newIno, err := i.getPrevInode(base, distance)
+	for tryTime := 0; ; tryTime++ {
+		newIno, err := p.getPrevInode(base, distance)
 		if err != nil {
 			return nil, err
 		}
 		if int32(newIno.Start) == inoIdx {
+			Stat.Inode.PrevSeekCnt.HitN(tryTime)
 			return newIno, nil
 		}
 		base = newIno
 	}
+
 }
 
-func (i *InodePool) CleanCache() {
-	i.pool = make(map[Address]*Inode, 32)
-	i.scatter.Clean()
+func (p *InodePool) CleanCache() {
+	p.pool = make(map[Address]*Inode, 32)
+	p.scatter.Clean()
 }
 
-func (i *InodePool) RefPayloadBlock() (*Inode, int, error) {
-	inode, err := i.GetLastest()
+func (p *InodePool) RefPayloadBlock() (*Inode, int, error) {
+	inode, err := p.GetLastest()
 	if err != nil {
 		return nil, -1, logex.Trace(err)
 	}
@@ -127,17 +146,17 @@ func (i *InodePool) RefPayloadBlock() (*Inode, int, error) {
 	}
 
 	// old inode is full
-	return i.next(inode), 0, nil
+	return p.next(inode), 0, nil
 }
 
-func (i *InodePool) getInPool(addr Address) *Inode {
-	return i.pool[addr]
+func (p *InodePool) getInPool(addr Address) *Inode {
+	return p.pool[addr]
 }
 
-func (i *InodePool) setPrevs(inode *Inode) error {
+func (p *InodePool) setPrevs(inode *Inode) error {
 	pair := []int{0, 1, 3, 7, 15, 31}
 	for idx, sIdx := range pair {
-		ino, err := i.getInScatter(sIdx)
+		ino, err := p.getInScatter(sIdx)
 		if err != nil {
 			return err
 		}
@@ -149,36 +168,40 @@ func (i *InodePool) setPrevs(inode *Inode) error {
 	return nil
 }
 
-func (i *InodePool) OnFlush(ino *Inode, addr Address) {
+func (p *InodePool) OnFlush(ino *Inode, addr Address) {
 	if ino.addr == addr {
 		return
 	}
-	oldAddr := ino.addr
-	ino.addr.Set(addr)
-	i.addCache(ino)
-	delete(i.pool, oldAddr)
+	p.updateInodeAddr(ino, addr)
 }
 
-func (i *InodePool) InitInode() *Inode {
-	ret := NewInode(i.ino)
+func (p *InodePool) updateInodeAddr(ino *Inode, addr Address) {
+	oldAddr := ino.addr
+	ino.addr.Set(addr)
+	p.addCache(ino)
+	delete(p.pool, oldAddr)
+}
+
+func (p *InodePool) InitInode() *Inode {
+	ret := NewInode(p.ino)
 	ret.addr.SetMem(unsafe.Pointer(ret))
-	i.addCache(ret)
-	i.scatter.Push(ret)
+	p.addCache(ret)
+	p.scatter.Push(ret)
 	return ret
 }
 
-func (i *InodePool) next(lastest *Inode) *Inode {
+func (p *InodePool) next(lastest *Inode) *Inode {
 	ret := &Inode{
 		Ino:       lastest.Ino,
 		Start:     lastest.Start + Int32(len(lastest.Offsets)),
 		PrevInode: emptyPrevs,
 	}
-	i.setPrevs(ret)
+	p.setPrevs(ret)
 
 	ret.addr.SetMem(unsafe.Pointer(ret))
-	i.addCache(ret)
+	p.addCache(ret)
 
-	i.scatter.Push(ret)
+	p.scatter.Push(ret)
 	return ret
 }
 
@@ -200,9 +223,16 @@ func (i *InodePool) GetByAddr(addr Address) (*Inode, error) {
 	return ino, nil
 }
 
+func (p *InodePool) getNextInCache(i *Inode) *Inode {
+	ino := p.nextInode[i.addr]
+	Stat.Inode.Cache.NextHit.HitIf(ino != nil)
+	return ino
+}
+
 func (p *InodePool) addCache(i *Inode) {
 	p.pool[i.addr] = i
 	p.offsetInode[int32(i.Start/InodeBlockCnt)] = i
+	p.nextInode[*i.PrevInode[0]] = i
 }
 
 // try to load inode one by one into memory

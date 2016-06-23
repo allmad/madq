@@ -47,7 +47,7 @@ type FileConfig struct {
 	Flags         int
 	Delegate      FileDelegater
 	FlushInterval time.Duration
-	FileFlusher   FileFlusher
+	Flusher       FileFlusher
 	FlushSize     int
 }
 
@@ -70,7 +70,7 @@ func NewFile(f *flow.Flow, cfg *FileConfig) (*File, error) {
 		delegate:      cfg.Delegate,
 		flushInterval: cfg.FlushInterval,
 		inodePool:     inodePool,
-		flusher:       cfg.FileFlusher,
+		flusher:       cfg.Flusher,
 		flushSize:     cfg.FlushSize,
 		cobuf:         NewCobuffer(cfg.FlushSize, cfg.FlushSize),
 
@@ -94,20 +94,19 @@ func (f *File) writeLoop() {
 	defer f.flow.DoneAndClose()
 	var (
 		wantFlush bool
+		timer     <-chan time.Time
 
 		flushReply = make(chan error, 100)
-		timer      = time.NewTimer(time.Second)
 	)
-	timer.Stop()
 
 loop:
 	for {
-		timer.Reset(f.flushInterval)
-
 		select {
-		case <-timer.C:
-			goto flush
+		case <-f.cobuf.IsWritten():
+			timer = time.NewTimer(f.flushInterval).C
 		case <-f.cobuf.IsFlush():
+			goto flush
+		case <-timer:
 			goto flush
 		case <-f.flushChan:
 			wantFlush = true

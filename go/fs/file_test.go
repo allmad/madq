@@ -59,7 +59,7 @@ func testNewFile(md bio.ReadWriterAt) *File {
 		Delegate:      delegate,
 		FlushInterval: time.Second,
 		FlushSize:     20 << 20,
-		FileFlusher:   flusher,
+		Flusher:       flusher,
 	})
 	test.Nil(err)
 	return f
@@ -216,7 +216,7 @@ func TestFileBigRW2(t *testing.T) {
 
 	testSize := 1048
 	buf := test.SeqBytes(testSize)
-	testTime := 10000
+	testTime := 5000
 	for i := 0; i < testTime; i++ {
 		// test.MarkLine()
 		test.Write(f, buf)

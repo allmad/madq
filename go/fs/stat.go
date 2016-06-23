@@ -3,14 +3,23 @@ package fs
 import (
 	"encoding/json"
 
-	"github.com/chzyer/madq/go/common"
+	"github.com/chzyer/madq/go/ptrace"
 )
 
 var Stat GStat
 
 type GStat struct {
 	Flusher struct {
-		BlockCopy common.Int
+		BlockCopy ptrace.Size
+	}
+	Inode struct {
+		Cache struct {
+			NextHit   ptrace.Ratio
+			InoIdxHit ptrace.Ratio
+		}
+
+		ReadDisk    ptrace.Int
+		PrevSeekCnt ptrace.Ratio
 	}
 }
 
