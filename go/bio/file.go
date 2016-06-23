@@ -48,7 +48,7 @@ func NewFileEx(root string, bit uint) (*File, error) {
 		return nil, logex.Trace(err)
 	}
 
-	root = filepath.Join(root)
+	root = filepath.Join(root) + string(os.PathSeparator)
 	file := &File{
 		root:      root,
 		bit:       bit,
@@ -195,7 +195,7 @@ type chunkctx struct {
 }
 
 func newChunkctx(base string, idx int64, writeOp bool) (*chunkctx, error) {
-	fp := filepath.Join(base, strconv.FormatInt(idx, 36))
+	fp := base + strconv.FormatInt(idx, 36)
 	oflag := os.O_RDWR
 	if writeOp {
 		oflag |= os.O_CREATE

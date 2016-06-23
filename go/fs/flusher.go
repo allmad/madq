@@ -64,6 +64,7 @@ func (f *Flusher) handleOpInPartialArea(dw *DiskWriter, op *flushItem) error {
 				ino.Offsets[idx], blkSize, err)
 		}
 		dw.WriteBytes(oldData)
+		Stat.Flusher.BlockCopy.AddInt(len(oldData))
 	}
 	length := op.data.Len()
 	op.data.WriteData(dw, -1)
@@ -114,6 +115,7 @@ writePayload:
 				"error in readdata at %v: %v", ino.Offsets[idx], err)
 		}
 		dw.WriteBytes(oldData)
+		Stat.Flusher.BlockCopy.AddInt(len(oldData))
 	}
 
 	op.data.WriteData(dw, BlockSize-blkSize)

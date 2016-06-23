@@ -66,7 +66,10 @@ func (c *Cobuffer) WriteData(b []byte) {
 			return
 		}
 		if !c.grow() {
-			c.flushChan <- struct{}{}
+			select {
+			case c.flushChan <- struct{}{}:
+			default:
+			}
 			runtime.Gosched()
 		}
 	}
