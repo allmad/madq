@@ -15,12 +15,16 @@ type Cobuffer struct {
 	rw        sync.RWMutex
 	maxSize   int
 	flushChan chan struct{}
+
+	writeChan     chan struct{}
+	writeChanSent int32
 }
 
 func NewCobuffer(n int, maxSize int) *Cobuffer {
 	return &Cobuffer{
 		buffer:    make([]byte, n),
 		flushChan: make(chan struct{}, 1),
+		writeChan: make(chan struct{}, 1),
 	}
 }
 
@@ -45,7 +49,11 @@ func (c *Cobuffer) Flush() {
 	}
 }
 
-func (c *Cobuffer) IsFlush() chan struct{} {
+func (c *Cobuffer) IsWritten() <-chan struct{} {
+	return c.writeChan
+}
+
+func (c *Cobuffer) IsFlush() <-chan struct{} {
 	return c.flushChan
 }
 
@@ -56,6 +64,8 @@ func (c *Cobuffer) GetData() []byte {
 
 	copy(buf, c.buffer)
 	c.offset = 0
+
+	atomic.StoreInt32(&c.writeChanSent, 0)
 	c.rw.Unlock()
 	return buf
 }
@@ -89,6 +99,13 @@ func (c *Cobuffer) writeData(b []byte) bool {
 	copy(c.buffer[newOff-int32(len(b)):newOff], b)
 	success = true
 
+	if atomic.CompareAndSwapInt32(&c.writeChanSent, 0, 1) {
+		select {
+		case c.writeChan <- struct{}{}:
+		default:
+		}
+	}
+
 exit:
 	c.rw.RUnlock()
 	return success
@@ -96,4 +113,5 @@ exit:
 
 func (c *Cobuffer) Close() {
 	close(c.flushChan)
+	close(c.writeChan)
 }
