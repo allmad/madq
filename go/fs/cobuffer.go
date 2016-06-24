@@ -23,6 +23,7 @@ type Cobuffer struct {
 func NewCobuffer(n int, maxSize int) *Cobuffer {
 	return &Cobuffer{
 		buffer:    make([]byte, n),
+		maxSize:   maxSize,
 		flushChan: make(chan struct{}, 1),
 		writeChan: make(chan struct{}, 1),
 	}

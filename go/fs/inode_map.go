@@ -9,8 +9,10 @@ import (
 	"github.com/chzyer/madq/go/bio"
 )
 
-const InodeMapCap = 1 << 20
-const InodeMapSize = 6 * InodeMapCap
+const (
+	InodeMapCap  = 1 << 20
+	InodeMapSize = 6 * InodeMapCap
+)
 
 type InodeMap struct {
 	offset   ShortAddr

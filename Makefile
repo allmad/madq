@@ -1,1 +1,2 @@
 all:
+	@go install

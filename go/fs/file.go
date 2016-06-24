@@ -28,7 +28,6 @@ type File struct {
 	flushWaiter sync.WaitGroup
 	flushChan   chan struct{}
 	writeChan   chan *fileWriteOp
-	replyPool   sync.Pool
 }
 
 type FileDelegater interface {
@@ -75,15 +74,10 @@ func NewFile(f *flow.Flow, cfg *FileConfig) (*File, error) {
 		delegate:  cfg.Delegate,
 		inodePool: inodePool,
 		flusher:   cfg.Flusher,
-		cobuf:     NewCobuffer(cfg.FlushSize, cfg.FlushSize),
+		cobuf:     NewCobuffer(1<<10, cfg.FlushSize),
 
 		flushChan: make(chan struct{}, 1),
 		writeChan: make(chan *fileWriteOp, 8),
-		replyPool: sync.Pool{
-			New: func() interface{} {
-				return make(chan error)
-			},
-		},
 	}
 	f.SetOnClose(func() {
 		file.Close()

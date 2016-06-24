@@ -7,10 +7,12 @@ var emptyPrevs = [6]*Address{
 	new(Address), new(Address), new(Address), new(Address), new(Address), new(Address),
 }
 
-const InodePadding = 44
-const InodeSize = 1024
-const InodeBlockCnt = 150
-const InodeCap = InodeBlockCnt * BlockSize
+const (
+	InodePadding  = 44
+	InodeSize     = 1024
+	InodeBlockCnt = 150
+	InodeCap      = InodeBlockCnt * BlockSize
+)
 
 // size: 1kB
 // one inode can store 37.5MB

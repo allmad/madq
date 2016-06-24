@@ -381,6 +381,7 @@ func (f *flushBuffer) reset() {
 }
 
 // -----------------------------------------------------------------------------
+
 type DataSlice struct {
 	data   [][]byte
 	length int

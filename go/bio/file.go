@@ -44,7 +44,7 @@ func NewFileEx(root string, bit uint) (*File, error) {
 	if bit > 32 {
 		return nil, ErrFileInvalidBit.Trace(bit)
 	}
-	if err := os.MkdirAll(root, 0744); err != nil {
+	if err := os.MkdirAll(root, 0755); err != nil {
 		return nil, logex.Trace(err)
 	}
 

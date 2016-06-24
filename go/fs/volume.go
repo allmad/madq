@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"time"
@@ -39,7 +40,24 @@ type VolumeConfig struct {
 	FlushSize     int
 }
 
+func (v *VolumeConfig) init() error {
+	if v.Delegate == nil {
+		return fmt.Errorf("volume init error: delegate is empty")
+	}
+	if v.FlushInterval == 0 {
+		v.FlushInterval = time.Second
+	}
+	if v.FlushSize == 0 {
+		v.FlushSize = 10 << 20
+	}
+	return nil
+}
+
 func NewVolume(f *flow.Flow, cfg *VolumeConfig) (*Volume, error) {
+	if err := cfg.init(); err != nil {
+		return nil, err
+	}
+
 	vh, err := ReadVolumeHeader(cfg.Delegate)
 	if err != nil {
 		if !logex.Equal(err, io.EOF) {
@@ -192,8 +210,11 @@ func (v *volumeFileDelegate) SaveInode(ino *Inode) {
 }
 
 // -----------------------------------------------------------------------------
-const VolumeHeaderSize = 16
-const MinVolumeHeaderCheckpoint = VolumeHeaderSize + InodeMapSize
+
+const (
+	VolumeHeaderSize          = 16
+	VolumeHeaderMinCheckpoint = VolumeHeaderSize + InodeMapSize
+)
 
 type VolumeHeader struct {
 	Version    Int32
@@ -233,7 +254,7 @@ func (v *VolumeHeader) Magic() Magic {
 func GenNewVolumeHeader(rw bio.ReadWriterAt) (*VolumeHeader, error) {
 	vh := new(VolumeHeader)
 	vh.Version = 1
-	vh.Checkpoint = MinVolumeHeaderCheckpoint
+	vh.Checkpoint = VolumeHeaderMinCheckpoint
 	if err := WriteDiskAt(rw, vh, 0); err != nil {
 		return nil, logex.Trace(err)
 	}
@@ -250,7 +271,7 @@ func ReadVolumeHeader(rw bio.ReadWriterAt) (*VolumeHeader, error) {
 	if err := ReadDisk(rw, vh, 0); err != nil {
 		return nil, logex.Trace(err)
 	}
-	if vh.Checkpoint < MinVolumeHeaderCheckpoint {
+	if vh.Checkpoint < VolumeHeaderMinCheckpoint {
 		return nil, logex.NewError("invalid checkpoint:", vh.Checkpoint)
 	}
 
