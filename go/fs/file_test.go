@@ -49,7 +49,7 @@ func (t *testFileDelegate) GetInodeByAddr(addr Address) (*Inode, error) {
 
 func testNewFile(md bio.ReadWriterAt) *File {
 	delegate := &testFileDelegate{md: md}
-	flusherDelegate := &testFlusherDelegate{md: md}
+	flusherDelegate := &testFlusherDelegate{md}
 
 	flusher := NewFlusher(flow.New(), &FlusherConfig{
 		Interval: time.Second,

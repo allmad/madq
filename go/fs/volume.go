@@ -1,66 +1,172 @@
 package fs
 
 import (
-	"fmt"
+	"io"
+	"os"
+	"time"
 
 	"github.com/chzyer/flow"
 	"github.com/chzyer/logex"
 	"github.com/chzyer/madq/go/bio"
 )
 
-type FileName [24]byte
+const FileNameSize = 28
+
+var ErrFileNotExist = logex.Define("file is not exists")
+
+type FileName [FileNameSize]byte
 
 type Volume struct {
+	cfg       *VolumeConfig
 	flow      *flow.Flow
 	header    *VolumeHeader
+	delegate  VolumeDelegate
 	fileCache map[string]*File
+
+	// init
+	flusher *Flusher
+	nameMap *NameMap
 }
 
 type VolumeDelegate interface {
 	bio.ReadWriterAt
+	ReadData(off int64, n int) ([]byte, error)
 }
 
 type VolumeConfig struct {
-	Delegate VolumeDelegate
+	Delegate      VolumeDelegate
+	FlushInterval time.Duration
+	FlushSize     int
 }
 
 func NewVolume(f *flow.Flow, cfg *VolumeConfig) (*Volume, error) {
 	vh, err := ReadVolumeHeader(cfg.Delegate)
 	if err != nil {
+		if !logex.Equal(err, io.EOF) {
+			return nil, logex.Trace(err)
+		}
+
 		// make a new one
-		return nil, err
+		vh, err = GenNewVolumeHeader(cfg.Delegate)
+		if err != nil {
+			return nil, logex.Trace(err)
+		}
 	}
+
 	vol := &Volume{
+		cfg:       cfg,
 		header:    vh,
+		delegate:  cfg.Delegate,
 		fileCache: make(map[string]*File, 16),
 	}
 	f.ForkTo(&vol.flow, vol.Close)
+
+	if err := vol.init(); err != nil {
+		return nil, err
+	}
 	return vol, nil
+}
+
+func (v *Volume) init() (err error) {
+	v.flusher = v.initFlusher()
+	v.nameMap, err = v.initNameMap()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *Volume) initFlusher() *Flusher {
+	return NewFlusher(v.flow, &FlusherConfig{
+		Offset:   int64(v.header.Checkpoint),
+		Interval: v.cfg.FlushInterval,
+		Delegate: v.delegate,
+	})
+}
+
+func (v *Volume) initNameMap() (*NameMap, error) {
+	fd, err := v.InoOpen(0, os.O_CREATE)
+	if err != nil {
+		return nil, logex.Trace(err)
+	}
+	return NewNameMap(fd)
 }
 
 func (v *Volume) getFileInCache(name string) *File {
 	return v.fileCache[name]
 }
 
-func (v *Volume) Open(name string) (*File, error) {
-	if len(name) > 24 {
-		return nil, fmt.Errorf("filename exceed 24bytes")
-	}
+func (v *Volume) InoOpen(ino int32, flags int) (*File, error) {
+	fd, err := NewFile(v.flow, &FileConfig{
+		Ino:           ino,
+		Flags:         flags,
+		Delegate:      &volumeFileDelegate{v.delegate, v.header.InodeMap},
+		FlushInterval: v.cfg.FlushInterval,
+		FlushSize:     v.cfg.FlushSize,
+		Flusher:       v.flusher,
+	})
+	return fd, err
+}
 
+func (v *Volume) Open(name string, flags int) (*File, error) {
 	if fd := v.getFileInCache(name); fd != nil {
 		return fd, nil
 	}
 
-	fd, err := NewFile(v.flow, &FileConfig{})
+	ino, err := v.nameMap.GetIno(name)
 	if err != nil {
-		return nil, err
+		return nil, logex.Trace(err)
 	}
 
+	if ino < 0 && !IsFileCreate(flags) {
+		return nil, ErrFileNotExist.Trace()
+	}
+	if ino < 0 {
+		// alloc ino
+		ino, err = v.nameMap.GetFreeIno()
+		if err != nil {
+			return nil, err
+		}
+		if err := v.nameMap.AddIno(name, ino); err != nil {
+			return nil, err
+		}
+	}
+
+	fd, err := v.InoOpen(ino, flags)
+	if err != nil {
+		return nil, logex.Trace(err)
+	}
 	return fd, nil
 }
 
 func (v *Volume) Close() {
+	v.flusher.Close()
+	v.nameMap.Close()
+	v.flow.Close()
+}
 
+// -----------------------------------------------------------------------------
+var _ FileDelegater = new(volumeFileDelegate)
+
+type volumeFileDelegate struct {
+	v    VolumeDelegate
+	imap *InodeMap
+}
+
+func (v *volumeFileDelegate) GetInode(ino int32) (*Inode, error) {
+	return v.imap.GetInode(ino)
+}
+
+func (v *volumeFileDelegate) GetInodeByAddr(addr Address) (*Inode, error) {
+	return v.imap.GetInodeByAddr(addr)
+}
+
+func (v *volumeFileDelegate) ReadData(addr ShortAddr, n int) ([]byte, error) {
+	return v.v.ReadData(int64(addr), n)
+}
+
+func (v *volumeFileDelegate) SaveInode(ino *Inode) {
+	v.imap.SaveInode(ino)
 }
 
 // -----------------------------------------------------------------------------
@@ -106,10 +212,15 @@ func GenNewVolumeHeader(rw bio.ReadWriterAt) (*VolumeHeader, error) {
 	vh := new(VolumeHeader)
 	vh.Version = 1
 	vh.Checkpoint = MinVolumeHeaderCheckpoint
-	if err := WriteDisk(rw, vh, 0); err != nil {
+	if err := WriteDiskAt(rw, vh, 0); err != nil {
 		return nil, logex.Trace(err)
 	}
-
+	imap, err := NewInodeMap(VolumeHeaderSize, rw, true)
+	if err != nil {
+		return nil, err
+	}
+	vh.InodeMap = imap
+	return vh, nil
 }
 
 func ReadVolumeHeader(rw bio.ReadWriterAt) (*VolumeHeader, error) {
@@ -121,7 +232,7 @@ func ReadVolumeHeader(rw bio.ReadWriterAt) (*VolumeHeader, error) {
 		return nil, logex.NewError("invalid checkpoint:", vh.Checkpoint)
 	}
 
-	imap, err := NewInodeMap(VolumeHeaderSize, rw)
+	imap, err := NewInodeMap(VolumeHeaderSize, rw, false)
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,7 @@ package fs
 
 import (
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/chzyer/logex"
@@ -22,7 +23,7 @@ type InodeMapDelegate interface {
 	bio.ReadWriterAt
 }
 
-func NewInodeMap(offset int64, delegate InodeMapDelegate) (*InodeMap, error) {
+func NewInodeMap(offset int64, delegate InodeMapDelegate, create bool) (*InodeMap, error) {
 	m := &InodeMap{
 		offset:   ShortAddr(offset),
 		delegate: delegate,
@@ -31,7 +32,10 @@ func NewInodeMap(offset int64, delegate InodeMapDelegate) (*InodeMap, error) {
 
 	n, err := delegate.ReadAt(m.InoMap, offset)
 	if err != nil {
-		return nil, logex.Trace(err)
+		if !logex.Equal(err, io.EOF) || !create {
+			return nil, logex.Trace(err)
+		}
+		return m, nil
 	}
 	if n != len(m.InoMap) {
 		return nil, fmt.Errorf("read inodemap: short read")
@@ -95,6 +99,7 @@ func (m *InodeMap) DiskSize() int {
 	return 6 * (1 << 30)
 }
 
+// TODO(chzyer): add replica
 func (m *InodeMap) Flush() error {
 	m.m.Lock()
 	_, err := m.delegate.WriteAt(m.InoMap, int64(m.offset))

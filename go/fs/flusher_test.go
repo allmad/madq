@@ -13,12 +13,12 @@ import (
 var _ FlushDelegate = new(testFlusherDelegate)
 
 type testFlusherDelegate struct {
-	md bio.ReadWriterAt
+	bio.ReadWriterAt
 }
 
-func (m *testFlusherDelegate) ReadData(addr ShortAddr, n int) ([]byte, error) {
+func (m *testFlusherDelegate) ReadData(addr int64, n int) ([]byte, error) {
 	buf := make([]byte, n)
-	n, err := m.md.ReadAt(buf, int64(addr))
+	n, err := m.ReadAt(buf, addr)
 	if err != nil {
 		return nil, err
 	}
@@ -26,17 +26,6 @@ func (m *testFlusherDelegate) ReadData(addr ShortAddr, n int) ([]byte, error) {
 		return nil, fmt.Errorf("short read")
 	}
 	return buf, nil
-}
-
-func (m *testFlusherDelegate) WriteData(addr ShortAddr, b []byte) error {
-	n, err := m.md.WriteAt(b, int64(addr))
-	if err != nil {
-		return err
-	}
-	if n != len(b) {
-		return fmt.Errorf("short written")
-	}
-	return nil
 }
 
 type testInodePoolMemDiskDelegate struct {
@@ -111,7 +100,7 @@ func TestFlusher(t *testing.T) {
 		// println("--------------", flusher.offset)
 		delegate := &testInodePoolMemDiskDelegate{
 			lastestAddr: 5 + 1,
-			md:          flusherDelegate.md,
+			md:          flusherDelegate.ReadWriterAt,
 		}
 		ipool0 := NewInodePool(0, delegate)
 		inode, err := ipool0.GetLastest()

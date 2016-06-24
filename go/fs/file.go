@@ -51,11 +51,15 @@ type FileConfig struct {
 	FlushSize     int
 }
 
+func IsFileCreate(flags int) bool {
+	return flags&os.O_CREATE > 0
+}
+
 func NewFile(f *flow.Flow, cfg *FileConfig) (*File, error) {
 	inodePool := NewInodePool(cfg.Ino, cfg.Delegate)
 
 	if _, err := inodePool.GetLastest(); err != nil {
-		if cfg.Flags&os.O_CREATE > 0 {
+		if IsFileCreate(cfg.Flags) {
 			inodePool.InitInode()
 			err = nil
 		} else {

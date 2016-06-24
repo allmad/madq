@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"io"
 	"sync"
 	"time"
 
@@ -9,8 +10,8 @@ import (
 )
 
 type FlushDelegate interface {
-	ReadData(offset ShortAddr, n int) ([]byte, error)
-	WriteData(offset ShortAddr, b []byte) error
+	ReadData(off int64, n int) ([]byte, error)
+	io.WriterAt
 }
 
 type Flusher struct {
@@ -57,7 +58,7 @@ func (f *Flusher) handleOpInPartialArea(dw *DiskWriter, op *flushItem) error {
 
 	if blkSize > 0 {
 		// ino.Offsets[idx] maybe in memory
-		oldData, err := f.delegate.ReadData(ino.Offsets[idx], blkSize)
+		oldData, err := f.delegate.ReadData(int64(ino.Offsets[idx]), blkSize)
 		if err != nil {
 			return logex.Tracefmt(
 				"error in readdata at %v(%v): %v",
@@ -109,7 +110,7 @@ writePayload:
 	}
 
 	if blkSize > 0 {
-		oldData, err := f.delegate.ReadData(ino.Offsets[idx], blkSize)
+		oldData, err := f.delegate.ReadData(int64(ino.Offsets[idx]), blkSize)
 		if err != nil {
 			return logex.Tracefmt(
 				"error in readdata at %v: %v", ino.Offsets[idx], err)
@@ -192,7 +193,7 @@ func (f *Flusher) flush(fb *flushBuffer) {
 
 	// write to disk
 flush:
-	err := f.delegate.WriteData(ShortAddr(f.offset), buffer)
+	_, err := f.delegate.WriteAt(buffer, f.offset)
 	if err != nil {
 		logex.Error("error in write data, wait 1 sec:", err)
 		switch f.flow.CloseOrWait(time.Second) {
