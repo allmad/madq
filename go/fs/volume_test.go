@@ -1,7 +1,9 @@
 package fs
 
 import (
+	"os"
 	"testing"
+	"time"
 
 	"github.com/chzyer/flow"
 	"github.com/chzyer/madq/go/bio"
@@ -13,7 +15,9 @@ func TestVolume(t *testing.T) {
 
 	delegate := bio.NewHybrid(test.NewMemDisk())
 	vol, err := NewVolume(flow.New(), &VolumeConfig{
-		Delegate: delegate,
+		Delegate:      delegate,
+		FlushInterval: time.Second,
+		FlushSize:     16 << 20,
 	})
 	defer vol.Close()
 	test.Nil(err)
@@ -23,5 +27,21 @@ func TestVolume(t *testing.T) {
 		test.Nil(fd)
 		test.Equal(ErrFileNotExist, err)
 	}
+
+	{
+		fd, err := vol.Open("hello", os.O_CREATE)
+		test.Nil(err)
+		test.Equal(fd.Ino(), int32(1))
+		fd.Write([]byte("hello"))
+		fd.Sync()
+		fd.Close()
+		test.Nil(vol.FlushInodeMap())
+
+		vol.CleanCache()
+		fd, err = vol.Open("hello", 0)
+		test.Nil(err)
+		test.ReadStringAt(fd, 0, "hello")
+	}
+
 	_ = vol
 }

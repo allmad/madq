@@ -70,13 +70,12 @@ func (m *InodeMap) GetInode(ino int32) (*Inode, error) {
 	var addr ShortAddr
 	_ = addr.ReadDisk(addrData)
 	if addr.IsEmpty() {
-		return nil, fmt.Errorf("fild not found: %v", ino)
+		return nil, fmt.Errorf("fild not found: (ino: %v)", ino)
 	}
 
 	inode := NewInode(ino)
-	buf := make([]byte, inode.DiskSize())
-	if err := inode.ReadDisk(buf); err != nil {
-		return nil, logex.Trace(err)
+	if err := ReadDisk(m.delegate, inode, Address(addr)); err != nil {
+		return nil, err
 	}
 	return inode, nil
 }
@@ -91,7 +90,7 @@ func (m *InodeMap) SaveInode(inode *Inode) {
 	if err != nil {
 		panic("inode number exceed cap")
 	}
-	inode.addr.WriteDisk(addrData)
+	ShortAddr(inode.addr).WriteDisk(addrData)
 	m.m.Unlock()
 }
 

@@ -11,16 +11,17 @@ type NameMap struct {
 	freeIno int32
 }
 
-func NewNameMap(fd *File) (*NameMap, error) {
+func NewNameMap(fd *File, start int32) (*NameMap, error) {
 	fsize := fd.Size()
 	n := fsize / NameMapItemSize
 	if n < 1024 {
 		n = 1024
 	}
 	nm := &NameMap{
-		fd:     fd,
-		cache:  make(map[FileName]int32, n),
-		useIno: make(map[int32]struct{}, n),
+		fd:      fd,
+		cache:   make(map[FileName]int32, n),
+		useIno:  make(map[int32]struct{}, n),
+		freeIno: start,
 	}
 	if err := nm.init(); err != nil {
 		return nil, err

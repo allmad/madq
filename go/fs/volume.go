@@ -73,39 +73,55 @@ func (v *Volume) init() (err error) {
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
+func (v *Volume) FlushInodeMap() error {
+	return v.header.InodeMap.Flush()
+}
+
 func (v *Volume) initFlusher() *Flusher {
-	return NewFlusher(v.flow, &FlusherConfig{
+	f := NewFlusher(v.flow, &FlusherConfig{
 		Offset:   int64(v.header.Checkpoint),
 		Interval: v.cfg.FlushInterval,
 		Delegate: v.delegate,
 	})
+
+	return f
 }
 
 func (v *Volume) initNameMap() (*NameMap, error) {
-	fd, err := v.InoOpen(0, os.O_CREATE)
+	fd, err := v.InoOpen(0, "/", os.O_CREATE)
 	if err != nil {
 		return nil, logex.Trace(err)
 	}
-	return NewNameMap(fd)
+	return NewNameMap(fd, 1)
+}
+
+func (v *Volume) addCache(fd *File) {
+	v.fileCache[fd.Name()] = fd
 }
 
 func (v *Volume) getFileInCache(name string) *File {
 	return v.fileCache[name]
 }
 
-func (v *Volume) InoOpen(ino int32, flags int) (*File, error) {
+func (v *Volume) InoOpen(ino int32, name string, flags int) (*File, error) {
 	fd, err := NewFile(v.flow, &FileConfig{
 		Ino:           ino,
 		Flags:         flags,
+		Name:          name,
 		Delegate:      &volumeFileDelegate{v.delegate, v.header.InodeMap},
 		FlushInterval: v.cfg.FlushInterval,
 		FlushSize:     v.cfg.FlushSize,
 		Flusher:       v.flusher,
 	})
-	return fd, err
+	if err != nil {
+		return nil, err
+	}
+	v.addCache(fd)
+	return fd, nil
 }
 
 func (v *Volume) Open(name string, flags int) (*File, error) {
@@ -132,11 +148,17 @@ func (v *Volume) Open(name string, flags int) (*File, error) {
 		}
 	}
 
-	fd, err := v.InoOpen(ino, flags)
+	fd, err := v.InoOpen(ino, name, flags)
 	if err != nil {
 		return nil, logex.Trace(err)
 	}
+
+	// add cache
 	return fd, nil
+}
+
+func (v *Volume) CleanCache() {
+	v.fileCache = make(map[string]*File)
 }
 
 func (v *Volume) Close() {

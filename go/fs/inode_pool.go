@@ -258,7 +258,7 @@ func (i *InodePool) getInScatter(n int) (*Inode, error) {
 			if k == len(i.scatter)-1 {
 				inode, err := i.delegate.GetInode(i.ino)
 				if err != nil {
-					return nil, logex.Trace(err, k)
+					return nil, logex.Trace(err, "scatterIdx:", k)
 				}
 				i.scatter[k] = inode
 			} else {

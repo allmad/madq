@@ -16,15 +16,14 @@ type fileWriteOp struct {
 }
 
 type File struct {
-	flow          *flow.Flow
-	ino           int32
-	flags         int
-	delegate      FileDelegater
-	inodePool     *InodePool
-	flushInterval time.Duration
-	flushSize     int
-	flusher       FileFlusher
-	cobuf         *Cobuffer
+	flow      *flow.Flow
+	cfg       *FileConfig
+	ino       int32
+	flags     int
+	delegate  FileDelegater
+	inodePool *InodePool
+	flusher   FileFlusher
+	cobuf     *Cobuffer
 
 	flushWaiter sync.WaitGroup
 	flushChan   chan struct{}
@@ -44,6 +43,7 @@ type FileFlusher interface {
 
 type FileConfig struct {
 	Ino           int32
+	Name          string
 	Flags         int
 	Delegate      FileDelegater
 	FlushInterval time.Duration
@@ -63,20 +63,19 @@ func NewFile(f *flow.Flow, cfg *FileConfig) (*File, error) {
 			inodePool.InitInode()
 			err = nil
 		} else {
-			return nil, err
+			return nil, logex.Trace(err)
 		}
 	}
 
 	file := &File{
-		flow:          f.Fork(1),
-		ino:           cfg.Ino,
-		flags:         cfg.Flags,
-		delegate:      cfg.Delegate,
-		flushInterval: cfg.FlushInterval,
-		inodePool:     inodePool,
-		flusher:       cfg.Flusher,
-		flushSize:     cfg.FlushSize,
-		cobuf:         NewCobuffer(cfg.FlushSize, cfg.FlushSize),
+		cfg:       cfg,
+		flow:      f.Fork(1),
+		ino:       cfg.Ino,
+		flags:     cfg.Flags,
+		delegate:  cfg.Delegate,
+		inodePool: inodePool,
+		flusher:   cfg.Flusher,
+		cobuf:     NewCobuffer(cfg.FlushSize, cfg.FlushSize),
 
 		flushChan: make(chan struct{}, 1),
 		writeChan: make(chan *fileWriteOp, 8),
@@ -94,6 +93,14 @@ func NewFile(f *flow.Flow, cfg *FileConfig) (*File, error) {
 	return file, nil
 }
 
+func (f *File) Name() string {
+	return f.cfg.Name
+}
+
+func (f *File) Ino() int32 {
+	return f.ino
+}
+
 func (f *File) writeLoop() {
 	defer f.flow.DoneAndClose()
 	var (
@@ -107,7 +114,7 @@ loop:
 	for {
 		select {
 		case <-f.cobuf.IsWritten():
-			timer = time.NewTimer(f.flushInterval).C
+			timer = time.NewTimer(f.cfg.FlushInterval).C
 		case <-f.cobuf.IsFlush():
 			goto flush
 		case <-timer:
