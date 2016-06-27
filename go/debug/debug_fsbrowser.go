@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/chzyer/flagly"
 	"github.com/chzyer/flow"
 	"github.com/chzyer/madq/go/bio"
 	"github.com/chzyer/madq/go/fs"
@@ -57,38 +58,15 @@ func (cfg *FSBrowser) handle(name string, vol *fs.Volume) error {
 			continue
 		}
 		sp := strings.Fields(line.Line)
-		switch sp[0] {
-		case "ls":
-			cfg.List(vol)
-		case "stat":
-			cfg.Stat(vol, sp[1:])
-		default:
-			println("unknown commmand:", line.Line)
+		fs := flagly.New("")
+		fs.Context(vol)
+		if err := fs.Compile(&FSBrowserCmd{}); err != nil {
+			return err
 		}
-	}
-	return nil
-}
-
-func (cfg *FSBrowser) Stat(vol *fs.Volume, files []string) {
-	for _, f := range files {
-		fd, err := vol.Open(f, 0)
-		if err != nil {
+		if err := fs.Run(sp); err != nil {
 			println(err.Error())
 			continue
 		}
-		cfg.StatFile(vol, fd)
 	}
-}
-
-func (cfg *FSBrowser) StatFile(vol *fs.Volume, fd *fs.File) {
-	fmt.Fprintf(os.Stderr,
-		"name: %v\nsize: %v\n",
-		fd.Name(), fd.Size(),
-	)
-}
-
-func (cfg *FSBrowser) List(vol *fs.Volume) {
-	for _, n := range vol.List() {
-		println(n)
-	}
+	return nil
 }
