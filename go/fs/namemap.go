@@ -42,8 +42,8 @@ func NewNameMap(fd *File, start int32) (*NameMap, error) {
 
 func (n *NameMap) List() []string {
 	list := make([]string, 0, len(n.cache))
-	for k := range n.cache {
-		list = append(list, k.String())
+	for k, ino := range n.cache {
+		list = append(list, fmt.Sprintf("%v\t%v", k.String(), ino))
 	}
 	return list
 }
@@ -83,6 +83,7 @@ func (n *NameMap) init() error {
 		if err := (&item).ReadDisk(buf[:]); err != nil {
 			return err
 		}
+		n.checkIno(int32(item.Ino))
 		n.cache[item.Name] = int32(item.Ino)
 	}
 	return nil
