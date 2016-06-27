@@ -8,7 +8,7 @@ var emptyPrevs = [6]*Address{
 }
 
 const (
-	InodePadding  = 44
+	InodePadding  = 36
 	InodeSize     = 1024
 	InodeBlockCnt = 150
 	InodeCap      = InodeBlockCnt * BlockSize
@@ -29,7 +29,11 @@ type Inode struct {
 	GroupSize Int32
 	GroupIdx  Int32 // 8
 
-	// padding : 1024 - (150*6) - 76 - Magic(4) = 44
+	Mtime Time // 4
+
+	// total: 84
+
+	// padding : 1024 - (150*6) - 84 - Magic(4) = 36
 
 	Offsets [InodeBlockCnt]ShortAddr
 
@@ -108,6 +112,8 @@ func (i *Inode) WriteDisk(b []byte) {
 	dw.WriteItem(i.GroupSize)
 	dw.WriteItem(i.GroupIdx)
 
+	dw.WriteItem(i.Mtime)
+
 	// padding
 	dw.Skip(InodePadding)
 
@@ -132,6 +138,7 @@ func (i *Inode) ReadDisk(b []byte) error {
 		i.PrevInode[4], i.PrevInode[5], &i.PrevGroup,
 
 		&i.GroupSize, &i.GroupIdx,
+		&i.Mtime,
 	}); err != nil {
 		return logex.Trace(err)
 	}

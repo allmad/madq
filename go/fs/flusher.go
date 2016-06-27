@@ -176,6 +176,7 @@ func (f *Flusher) handleOps(data []byte, ops []*flushItem) int64 {
 			continue
 		}
 		for _, ino := range op.tmpInodes {
+			ino.Mtime.Set(time.Now())
 			inoAddr := f.getAddr(dw.Written())
 			dw.WriteItem(ino)
 			op.inoPool.OnFlush(ino, inoAddr)

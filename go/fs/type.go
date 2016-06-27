@@ -3,6 +3,7 @@ package fs
 import (
 	"encoding/binary"
 	"fmt"
+	"time"
 	"unsafe"
 )
 
@@ -22,6 +23,26 @@ func (v *Int32) ReadDisk(w []byte) error {
 
 func (v Int32) WriteDisk(w []byte) {
 	binary.BigEndian.PutUint32(w, uint32(v))
+}
+
+// -----------------------------------------------------------------------------
+
+type Time int64
+
+func (Time) DiskSize() int { return 8 }
+func (v *Time) ReadDisk(w []byte) error {
+	n := binary.BigEndian.Uint64(w)
+	*v = Time(n)
+	return nil
+}
+func (v Time) WriteDisk(w []byte) {
+	binary.BigEndian.PutUint64(w, uint64(v))
+}
+func (v *Time) Set(t time.Time) {
+	*v = Time(t.UnixNano())
+}
+func (v Time) Get() time.Time {
+	return time.Unix(0, int64(v))
 }
 
 // -----------------------------------------------------------------------------
