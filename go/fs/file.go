@@ -106,6 +106,7 @@ func (f *File) writeLoop() {
 
 		flushReply = make(chan error, 100)
 		flushStart = time.Now()
+		buffer     []byte
 	)
 
 loop:
@@ -130,7 +131,11 @@ loop:
 		continue
 
 	flush:
-		buffer := f.cobuf.GetData()
+		n := f.cobuf.GetData(buffer)
+		if n > 0 {
+			buffer = make([]byte, n)
+			goto flush
+		}
 		Stat.File.FlushSize.AddBuf(buffer)
 		f.flusher.WriteByInode(f.inodePool, buffer, flushReply)
 		if wantFlush {

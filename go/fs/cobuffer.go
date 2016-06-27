@@ -73,15 +73,18 @@ func (c *Cobuffer) IsFlush() <-chan struct{} {
 	return c.flushChan
 }
 
-func (c *Cobuffer) GetData() []byte {
+func (c *Cobuffer) GetData(buffer []byte) int {
 	now := time.Now()
 	c.rw.Lock()
 	Stat.Cobuffer.GetDataLock.AddNow(now)
 	now = time.Now()
 	n := int(c.offset)
-	buf := make([]byte, n)
+	if len(buffer) < n {
+		c.rw.Unlock()
+		return n
+	}
 
-	copy(buf, c.buffer)
+	copy(buffer, c.buffer)
 	c.offset = 0
 
 	Stat.Cobuffer.GetData.AddNow(now)
@@ -91,7 +94,7 @@ func (c *Cobuffer) GetData() []byte {
 	atomic.StoreInt32(&c.writeChanSent, 0)
 	atomic.StoreInt32(&c.flushChanSent, 0)
 	c.rw.Unlock()
-	return buf
+	return 0
 }
 
 func (c *Cobuffer) WriteData(b []byte) {

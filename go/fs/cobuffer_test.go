@@ -19,13 +19,21 @@ func BenchmarkCobuffer(b *testing.B) {
 	wg.Add(4)
 
 	go func() {
+		var buffer []byte
 		for {
 			_, ok := <-buf.IsFlush()
 			if !ok {
 				break
 			}
 
-			buf.GetData()
+			for {
+				n := buf.GetData(buffer)
+				if n > 0 {
+					buffer = make([]byte, n)
+				} else {
+					break
+				}
+			}
 		}
 	}()
 
