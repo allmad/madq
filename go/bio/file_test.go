@@ -9,7 +9,7 @@ import (
 	"github.com/chzyer/test"
 )
 
-var _ RawDisker = new(File)
+var _ ReadWriterAt = new(File)
 
 func TestFileException(t *testing.T) {
 	defer test.New(t)
