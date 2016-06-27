@@ -7,6 +7,7 @@ import (
 
 	"github.com/chzyer/flow"
 	"github.com/chzyer/madq/go/bio"
+	"github.com/chzyer/madq/go/common"
 	"github.com/chzyer/madq/go/fs"
 )
 
@@ -22,11 +23,12 @@ func (f *FsFile) FlaglyDesc() string {
 
 func (cfg *FsFile) FlaglyHandle(f *flow.Flow) error {
 	defer f.Close()
-	if err := os.RemoveAll(cfg.Dir); err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
+
+	flock, err := common.LockDir(cfg.Dir)
+	if err != nil {
+		return err
 	}
+	defer flock.Unlock()
 
 	file, err := bio.NewFile(cfg.Dir)
 	if err != nil {

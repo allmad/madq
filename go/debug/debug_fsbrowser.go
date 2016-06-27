@@ -9,6 +9,7 @@ import (
 	"github.com/chzyer/flagly"
 	"github.com/chzyer/flow"
 	"github.com/chzyer/madq/go/bio"
+	"github.com/chzyer/madq/go/common"
 	"github.com/chzyer/madq/go/fs"
 	"github.com/chzyer/readline"
 )
@@ -27,6 +28,12 @@ func (cfg *FSBrowser) FlaglyHandle(f *flow.Flow) error {
 	if _, err := os.Stat(cfg.Dir); os.IsNotExist(err) {
 		return err
 	}
+
+	flock, err := common.NewFlock(cfg.Dir)
+	if err != nil {
+		return err
+	}
+	defer flock.Unlock()
 
 	fd, err := bio.NewFile(cfg.Dir)
 	if err != nil {
