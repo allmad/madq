@@ -149,7 +149,8 @@ func TestFileRead(t *testing.T) {
 		// test.MarkLine()
 	}
 
-	fr := NewFileReader(f, 0)
+	test.True(f.AddRef())
+	fr := NewHandle(f, 0)
 	for i := 0; i < testTime; i++ {
 		// test.MarkLine()
 		test.Mark(i)
@@ -188,7 +189,8 @@ func TestFileBigRW1(t *testing.T) {
 	test.Mark("fileSize")
 	test.Equal(f.Size(), testSize*testTime)
 
-	fr := NewFileReader(f, 0)
+	test.True(f.AddRef())
+	fr := NewHandle(f, 0)
 	for i := 0; i < testTime; i++ {
 		test.Mark("read ", i)
 		test.ReadAndCheck(fr, buf)
@@ -230,7 +232,8 @@ func TestFileBigRW2(t *testing.T) {
 	test.Mark("fileSize")
 	test.Equal(f.Size(), testSize*testTime)
 
-	fr := NewFileReader(f, 0)
+	test.True(f.AddRef())
+	fr := NewHandle(f, 0)
 	for i := 0; i < testTime; i++ {
 		test.Mark("read ", i)
 		test.ReadAndCheck(fr, buf)

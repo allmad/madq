@@ -60,7 +60,9 @@ func (f *Flusher) handleOpInPartialArea(dw *DiskWriter, op *flushItem) error {
 
 	if blkSize > 0 {
 		// ino.Offsets[idx] maybe in memory
+		now := time.Now()
 		oldData, err := f.delegate.ReadData(int64(ino.Offsets[idx]), blkSize)
+		Stat.Flusher.ReadTime.AddNow(now)
 		if err != nil {
 			return logex.Tracefmt(
 				"error in readdata at %v(%v): %v",
@@ -112,7 +114,10 @@ writePayload:
 	}
 
 	if blkSize > 0 {
+		now := time.Now()
 		oldData, err := f.delegate.ReadData(int64(ino.Offsets[idx]), blkSize)
+		Stat.Flusher.ReadTime.AddNow(now)
+
 		if err != nil {
 			return logex.Tracefmt(
 				"error in readdata at %v: %v", ino.Offsets[idx], err)
@@ -193,14 +198,16 @@ func (f *Flusher) flush(fb *flushBuffer) {
 	if len(fb.ops()) == 0 {
 		return
 	}
+	Stat.Flusher.FlushTime.Add(1)
+
+	var err error
 	buffer := fb.alloc()
 	written := f.handleOps(buffer, fb.ops())
 	buffer = buffer[:written]
 
 	// write to disk
 flush:
-	_, err := f.delegate.WriteAt(buffer, f.offset)
-	if err != nil {
+	if _, err = f.delegate.WriteAt(buffer, f.offset); err != nil {
 		logex.Error("error in write data, wait 1 sec:", err)
 		switch f.flow.CloseOrWait(time.Second) {
 		case flow.F_CLOSED:
@@ -217,6 +224,7 @@ flush:
 		}
 	}
 
+	Stat.Flusher.FlushSize.AddInt(len(buffer))
 	f.offset += int64(len(buffer))
 	f.delegate.UpdateCheckpoint(f.offset)
 	for _, op := range fb.ops() {

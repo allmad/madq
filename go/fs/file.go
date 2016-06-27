@@ -105,6 +105,7 @@ func (f *File) writeLoop() {
 		timer     <-chan time.Time
 
 		flushReply = make(chan error, 100)
+		flushStart = time.Now()
 	)
 
 loop:
@@ -130,11 +131,14 @@ loop:
 
 	flush:
 		buffer := f.cobuf.GetData()
+		Stat.File.FlushSize.AddBuf(buffer)
 		f.flusher.WriteByInode(f.inodePool, buffer, flushReply)
 		if wantFlush {
 			f.flushWaiter.Done()
 			wantFlush = false
 		}
+		Stat.File.FlushDuration.AddNow(flushStart)
+		flushStart = time.Now()
 	}
 }
 
@@ -239,7 +243,6 @@ func (f *File) Close() error {
 	isClose := f.ref == 0
 	if isClose {
 		f.ref = -1
-		println("close file:", f.Name())
 	}
 	f.refGuard.Unlock()
 

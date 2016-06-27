@@ -16,6 +16,9 @@ type testFlusherDelegate struct {
 	bio.ReadWriterAt
 }
 
+func (m *testFlusherDelegate) UpdateCheckpoint(int64) {
+}
+
 func (m *testFlusherDelegate) ReadData(addr int64, n int) ([]byte, error) {
 	buf := make([]byte, n)
 	n, err := m.ReadAt(buf, addr)
@@ -76,6 +79,36 @@ func TestFlusherBigRW(t *testing.T) {
 		flusher.Flush()
 		test.Nil(<-done)
 	}
+}
+
+func BenchmarkFlusher(b *testing.B) {
+	defer test.New(b)
+
+	root := test.Root()
+	fd, err := bio.NewFile(root)
+	test.Nil(err)
+
+	flusherDelegate := &testFlusherDelegate{fd}
+	f := flow.New()
+	flusher := NewFlusher(f, &FlusherConfig{
+		Interval: time.Second,
+		Delegate: flusherDelegate,
+		Offset:   0,
+	})
+	ipool := NewInodePool(0, &testInodePoolDelegate{})
+	ipool.InitInode()
+	done := make(chan error, 1)
+	go func() {
+		for _ = range done {
+		}
+	}()
+
+	buf := test.RandBytes(10240)
+	for i := 0; i < b.N; i++ {
+		flusher.WriteByInode(ipool, buf, done)
+		b.SetBytes(int64(len(buf)))
+	}
+	flusher.Flush()
 }
 
 func TestFlusher(t *testing.T) {

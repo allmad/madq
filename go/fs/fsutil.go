@@ -1,5 +1,12 @@
 package fs
 
+import (
+	"fmt"
+
+	"github.com/chzyer/madq/go/bio"
+	"github.com/chzyer/madq/go/common"
+)
+
 const (
 	BlockBit  = 18
 	BlockSize = 1 << BlockBit
@@ -63,4 +70,35 @@ func initOffsetIdx() (ret [32]int) {
 		factor *= 2
 	}
 	return
+}
+
+// -----------------------------------------------------------------------------
+
+type VolumeSource struct {
+	flock *common.Flock
+	file  *bio.File
+	*bio.Hybrid
+}
+
+func (v *VolumeSource) Close() {
+	v.flock.Unlock()
+	v.file.Close()
+}
+
+func NewVolumeSource(dir string) (*VolumeSource, error) {
+	flock, err := common.LockDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	file, err := bio.NewFile(dir)
+	if err != nil {
+		return nil, fmt.Errorf("open volume: ", err)
+	}
+
+	return &VolumeSource{
+		flock:  flock,
+		file:   file,
+		Hybrid: bio.NewHybrid(file),
+	}, nil
 }

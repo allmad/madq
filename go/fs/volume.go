@@ -114,6 +114,10 @@ func (v *Volume) initNameMap() (*NameMap, error) {
 	return NewNameMap(NewHandle(fd, 0), 1)
 }
 
+func (v *Volume) removeCache(fd *File) {
+	delete(v.fileCache, fd.Name())
+}
+
 func (v *Volume) addCache(fd *File) {
 	v.fileCache[fd.Name()] = fd
 }
@@ -122,8 +126,7 @@ func (v *Volume) getFileInCache(name string) *Handle {
 	f := v.fileCache[name]
 	if f != nil {
 		if !f.AddRef() {
-			delete(v.fileCache, name)
-			f = nil
+			v.removeCache(f)
 			return nil
 		}
 		return NewHandle(f, 0)
