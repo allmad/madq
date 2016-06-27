@@ -84,7 +84,7 @@ func (c *Cobuffer) GetData(buffer []byte) int {
 		return n
 	}
 
-	copy(buffer, c.buffer)
+	copy(buffer[:n], c.buffer)
 	c.offset = 0
 
 	Stat.Cobuffer.GetData.AddNow(now)
@@ -94,7 +94,7 @@ func (c *Cobuffer) GetData(buffer []byte) int {
 	atomic.StoreInt32(&c.writeChanSent, 0)
 	atomic.StoreInt32(&c.flushChanSent, 0)
 	c.rw.Unlock()
-	return 0
+	return n
 }
 
 func (c *Cobuffer) WriteData(b []byte) {

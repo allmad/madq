@@ -207,7 +207,13 @@ func (f *Flusher) flush(fb *flushBuffer) {
 
 	// write to disk
 flush:
-	if _, err = f.delegate.WriteAt(buffer, f.offset); err != nil {
+	{
+		now := time.Now()
+		_, err = f.delegate.WriteAt(buffer, f.offset)
+		Stat.Flusher.WriteTime.AddNow(now)
+	}
+
+	if err != nil {
 		logex.Error("error in write data, wait 1 sec:", err)
 		switch f.flow.CloseOrWait(time.Second) {
 		case flow.F_CLOSED:
@@ -224,7 +230,7 @@ flush:
 		}
 	}
 
-	Stat.Flusher.FlushSize.AddInt(len(buffer))
+	Stat.Flusher.FlushSize.AddBuf(buffer)
 	f.offset += int64(len(buffer))
 	f.delegate.UpdateCheckpoint(f.offset)
 	for _, op := range fb.ops() {

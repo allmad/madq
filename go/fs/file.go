@@ -132,12 +132,14 @@ loop:
 
 	flush:
 		n := f.cobuf.GetData(buffer)
-		if n > 0 {
+		if n > len(buffer) {
+			Stat.File.RegenBuffer.Hit()
 			buffer = make([]byte, n)
 			goto flush
 		}
-		Stat.File.FlushSize.AddBuf(buffer)
-		f.flusher.WriteByInode(f.inodePool, buffer, flushReply)
+
+		Stat.File.FlushSize.AddBuf(buffer[:n])
+		f.flusher.WriteByInode(f.inodePool, buffer[:n], flushReply)
 		if wantFlush {
 			f.flushWaiter.Done()
 			wantFlush = false

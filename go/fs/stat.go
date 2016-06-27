@@ -12,8 +12,9 @@ type GStat struct {
 	Flusher struct {
 		BlockCopy ptrace.Size
 		FlushTime ptrace.Int
-		FlushSize ptrace.Size
+		FlushSize ptrace.RatioSize
 		ReadTime  ptrace.RatioTime
+		WriteTime ptrace.RatioTime
 	}
 	Inode struct {
 		Cache struct {
@@ -27,6 +28,7 @@ type GStat struct {
 	File struct {
 		FlushSize     ptrace.RatioSize
 		FlushDuration ptrace.RatioTime
+		RegenBuffer   ptrace.Ratio
 	}
 	Cobuffer struct {
 		Trytime            ptrace.Ratio
