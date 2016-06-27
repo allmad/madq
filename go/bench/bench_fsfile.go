@@ -13,7 +13,7 @@ import (
 type FsFile struct {
 	BenchCnt  int    `name:"count" desc:"bench size" default:"200"`
 	BlockSize int    `name:"bs" desc:"block size" default:"200"`
-	Dir       string `desc:"test directory path" default:"/tmp/madq"`
+	Dir       string `desc:"test directory path" default:"/tmp/madq/bench/fsfile"`
 }
 
 func (f *FsFile) FlaglyDesc() string {
