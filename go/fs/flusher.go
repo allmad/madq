@@ -189,6 +189,9 @@ func (f *Flusher) handleOps(data []byte, ops []*flushItem) int64 {
 }
 
 func (f *Flusher) flush(fb *flushBuffer) {
+	if len(fb.ops()) == 0 {
+		return
+	}
 	buffer := fb.alloc()
 	written := f.handleOps(buffer, fb.ops())
 	buffer = buffer[:written]
