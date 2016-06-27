@@ -107,22 +107,31 @@ func (v *Volume) initFlusher() *Flusher {
 }
 
 func (v *Volume) initNameMap() (*NameMap, error) {
-	fd, err := v.InoOpen(0, "/", os.O_CREATE)
+	fd, err := v.inoOpen(0, "/", os.O_CREATE)
 	if err != nil {
 		return nil, logex.Trace(err)
 	}
-	return NewNameMap(fd, 1)
+	return NewNameMap(NewHandle(fd, 0), 1)
 }
 
 func (v *Volume) addCache(fd *File) {
 	v.fileCache[fd.Name()] = fd
 }
 
-func (v *Volume) getFileInCache(name string) *File {
-	return v.fileCache[name]
+func (v *Volume) getFileInCache(name string) *Handle {
+	f := v.fileCache[name]
+	if f != nil {
+		if !f.AddRef() {
+			delete(v.fileCache, name)
+			f = nil
+			return nil
+		}
+		return NewHandle(f, 0)
+	}
+	return nil
 }
 
-func (v *Volume) InoOpen(ino int32, name string, flags int) (*File, error) {
+func (v *Volume) inoOpen(ino int32, name string, flags int) (*File, error) {
 	fd, err := NewFile(v.flow, &FileConfig{
 		Ino:           ino,
 		Flags:         flags,
@@ -139,7 +148,7 @@ func (v *Volume) InoOpen(ino int32, name string, flags int) (*File, error) {
 	return fd, nil
 }
 
-func (v *Volume) Open(name string, flags int) (*File, error) {
+func (v *Volume) Open(name string, flags int) (*Handle, error) {
 	if fd := v.getFileInCache(name); fd != nil {
 		return fd, nil
 	}
@@ -163,13 +172,16 @@ func (v *Volume) Open(name string, flags int) (*File, error) {
 		}
 	}
 
-	fd, err := v.InoOpen(ino, name, flags)
+	fd, err := v.inoOpen(ino, name, flags)
 	if err != nil {
 		return nil, logex.Trace(err)
 	}
+	if !fd.AddRef() {
+		panic("can't be fail")
+	}
 
 	// add cache
-	return fd, nil
+	return NewHandle(fd, 0), nil
 }
 
 func (v *Volume) List() []string {

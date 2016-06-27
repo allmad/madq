@@ -16,6 +16,9 @@ type fileWriteOp struct {
 }
 
 type File struct {
+	ref      int32
+	refGuard sync.Mutex
+
 	flow      *flow.Flow
 	cfg       *FileConfig
 	ino       int32
@@ -135,6 +138,10 @@ loop:
 	}
 }
 
+func (f *File) Stat() (*Inode, error) {
+	return f.inodePool.GetLastest()
+}
+
 func (f *File) Size() int64 {
 	ino, err := f.inodePool.GetLastest()
 	if err != nil {
@@ -213,7 +220,33 @@ func (f *File) Sync() {
 	f.flusher.Flush()
 }
 
+func (f *File) AddRef() bool {
+	succ := false
+	f.refGuard.Lock()
+	if f.ref >= 0 {
+		f.ref++
+		succ = true
+	}
+	f.refGuard.Unlock()
+	return succ
+}
+
 func (f *File) Close() error {
+	f.refGuard.Lock()
+	if f.ref >= 1 {
+		f.ref--
+	}
+	isClose := f.ref == 0
+	if isClose {
+		f.ref = -1
+		println("close file:", f.Name())
+	}
+	f.refGuard.Unlock()
+
+	if !isClose {
+		return nil
+	}
+
 	if !f.flow.MarkExit() {
 		return nil
 	}
@@ -221,22 +254,4 @@ func (f *File) Close() error {
 	f.flow.Close()
 	f.cobuf.Close()
 	return nil
-}
-
-type FileReader struct {
-	*File
-	offset int64
-}
-
-func NewFileReader(f *File, off int64) *FileReader {
-	return &FileReader{
-		File:   f,
-		offset: off,
-	}
-}
-
-func (f *FileReader) Read(b []byte) (int, error) {
-	n, err := f.File.ReadAt(b, f.offset)
-	f.offset += int64(n)
-	return n, err
 }

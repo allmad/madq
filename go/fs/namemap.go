@@ -16,20 +16,20 @@ func (f *FileName) String() string {
 // NameMap is a File which ino is 0
 // fd close by NameMap
 type NameMap struct {
-	fd      *File
+	fh      *Handle
 	cache   map[FileName]int32
 	useIno  map[int32]struct{}
 	freeIno int32
 }
 
-func NewNameMap(fd *File, start int32) (*NameMap, error) {
-	fsize := fd.Size()
+func NewNameMap(fh *Handle, start int32) (*NameMap, error) {
+	fsize := fh.Size()
 	n := fsize / NameMapItemSize
 	if n < 1024 {
 		n = 1024
 	}
 	nm := &NameMap{
-		fd:      fd,
+		fh:      fh,
 		cache:   make(map[FileName]int32, n),
 		useIno:  make(map[int32]struct{}, n),
 		freeIno: start,
@@ -69,14 +69,13 @@ func (n *NameMap) GetFreeIno() (int32, error) {
 }
 
 func (n *NameMap) init() error {
-	fr := NewFileReader(n.fd, 0)
-	fsize := fr.Size()
+	fsize := n.fh.Size()
 	size := int(fsize / NameMapItemSize)
 
 	var buf [32]byte
 	var item NameMapItem
 	for i := 0; i < size; i++ {
-		_, err := fr.Read(buf[:])
+		_, err := n.fh.Read(buf[:])
 		if err != nil {
 			return err
 		}
@@ -104,10 +103,10 @@ func (n *NameMap) AddIno(name string, ino int32) error {
 	buf := make([]byte, NameMapItemSize)
 	(&NameMapItem{fn, Int32(ino)}).WriteDisk(buf)
 
-	if _, err := n.fd.Write(buf); err != nil {
+	if _, err := n.fh.Write(buf); err != nil {
 		return err
 	}
-	n.fd.Sync()
+	n.fh.Sync()
 	return nil
 }
 
@@ -135,7 +134,7 @@ func (n *NameMap) getName(name string) (FileName, error) {
 }
 
 func (n *NameMap) Close() {
-	n.fd.Close()
+	n.fh.Close()
 }
 
 // -----------------------------------------------------------------------------
