@@ -5,16 +5,19 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 var ErrSpaceNotEnough = fmt.Errorf("buffer space is not enough")
 
 type Cobuffer struct {
-	buffer    []byte
-	offset    int32
-	rw        sync.RWMutex
-	maxSize   int
-	flushChan chan struct{}
+	buffer        []byte
+	offset        int32
+	rw            sync.RWMutex
+	maxSize       int
+	flushChan     chan struct{}
+	flushChanSent int32
+	wantFlushTime time.Time
 
 	writeChan     chan struct{}
 	writeChanSent int32
@@ -29,7 +32,15 @@ func NewCobuffer(n int, maxSize int) *Cobuffer {
 	}
 }
 
+func (c *Cobuffer) isWantFlush() bool {
+	return atomic.LoadInt32(&c.flushChanSent) == 1
+}
+
 func (c *Cobuffer) grow() bool {
+	if c.isWantFlush() {
+		return false
+	}
+
 	success := false
 	c.rw.Lock()
 	if len(c.buffer) >= c.maxSize {
@@ -44,6 +55,10 @@ exit:
 }
 
 func (c *Cobuffer) Flush() {
+	if !atomic.CompareAndSwapInt32(&c.flushChanSent, 0, 1) {
+		return
+	}
+	c.wantFlushTime = time.Now()
 	select {
 	case c.flushChan <- struct{}{}:
 	default:
@@ -59,34 +74,46 @@ func (c *Cobuffer) IsFlush() <-chan struct{} {
 }
 
 func (c *Cobuffer) GetData() []byte {
+	now := time.Now()
 	c.rw.Lock()
+	Stat.Cobuffer.GetDataLock.AddNow(now)
+	now = time.Now()
 	n := int(c.offset)
 	buf := make([]byte, n)
 
 	copy(buf, c.buffer)
 	c.offset = 0
 
+	Stat.Cobuffer.GetData.AddNow(now)
+	Stat.Cobuffer.FlushDelay.AddNow(c.wantFlushTime)
+	c.wantFlushTime = time.Now()
+
 	atomic.StoreInt32(&c.writeChanSent, 0)
+	atomic.StoreInt32(&c.flushChanSent, 0)
 	c.rw.Unlock()
 	return buf
 }
 
 func (c *Cobuffer) WriteData(b []byte) {
+	tryTime := 0
 	for {
 		if c.writeData(b) {
+			Stat.Cobuffer.Trytime.HitN(tryTime)
 			return
 		}
+		tryTime++
 		if !c.grow() {
-			select {
-			case c.flushChan <- struct{}{}:
-			default:
-			}
+			c.Flush()
 			runtime.Gosched()
 		}
 	}
 }
 
 func (c *Cobuffer) writeData(b []byte) bool {
+	if c.isWantFlush() {
+		return false
+	}
+
 	success := false
 
 	c.rw.RLock()
@@ -105,6 +132,11 @@ func (c *Cobuffer) writeData(b []byte) bool {
 		case c.writeChan <- struct{}{}:
 		default:
 		}
+	}
+
+	Stat.Cobuffer.NotifyFlushByWrite.HitIf(int(newOff) > c.maxSize/2)
+	if int(newOff) > c.maxSize/2 {
+		c.Flush()
 	}
 
 exit:
