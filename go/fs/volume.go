@@ -11,11 +11,7 @@ import (
 	"github.com/chzyer/madq/go/bio"
 )
 
-const FileNameSize = 28
-
 var ErrFileNotExist = logex.Define("file is not exists")
-
-type FileName [FileNameSize]byte
 
 type Volume struct {
 	cfg       *VolumeConfig
@@ -99,11 +95,12 @@ func (v *Volume) FlushInodeMap() error {
 	return v.header.InodeMap.Flush()
 }
 
+// require header is inited
 func (v *Volume) initFlusher() *Flusher {
 	f := NewFlusher(v.flow, &FlusherConfig{
 		Offset:   int64(v.header.Checkpoint),
 		Interval: v.cfg.FlushInterval,
-		Delegate: v.delegate,
+		Delegate: &volumeFlusherDelegate{v.header, v.delegate},
 	})
 
 	return f
@@ -175,6 +172,10 @@ func (v *Volume) Open(name string, flags int) (*File, error) {
 	return fd, nil
 }
 
+func (v *Volume) List() []string {
+	return v.nameMap.List()
+}
+
 func (v *Volume) CleanCache() {
 	v.fileCache = make(map[string]*File)
 }
@@ -183,9 +184,26 @@ func (v *Volume) Close() {
 	v.flusher.Close()
 	v.nameMap.Close()
 	v.flow.Close()
+	if err := v.header.Flush(v.delegate); err != nil {
+		println("volume header flush error:", err.Error())
+	}
 }
 
 // -----------------------------------------------------------------------------
+
+var _ FlushDelegate = new(volumeFlusherDelegate)
+
+type volumeFlusherDelegate struct {
+	header *VolumeHeader
+	VolumeDelegate
+}
+
+func (v *volumeFlusherDelegate) UpdateCheckpoint(cp int64) {
+	v.header.Checkpoint.Set(Address(cp))
+}
+
+// -----------------------------------------------------------------------------
+
 var _ FileDelegater = new(volumeFileDelegate)
 
 type volumeFileDelegate struct {
@@ -249,6 +267,16 @@ func (v *VolumeHeader) ReadDisk(b []byte) error {
 
 func (v *VolumeHeader) Magic() Magic {
 	return MagicVolume
+}
+
+func (v *VolumeHeader) Flush(w io.WriterAt) error {
+	if err := WriteDiskAt(w, v, 0); err != nil {
+		return err
+	}
+	if err := v.InodeMap.Flush(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func GenNewVolumeHeader(rw bio.ReadWriterAt) (*VolumeHeader, error) {

@@ -1,6 +1,17 @@
 package fs
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
+
+const FileNameSize = 28
+
+type FileName [FileNameSize]byte
+
+func (f *FileName) String() string {
+	return strings.TrimRight(string(f[:]), "\x00")
+}
 
 // NameMap is a File which ino is 0
 // fd close by NameMap
@@ -27,6 +38,14 @@ func NewNameMap(fd *File, start int32) (*NameMap, error) {
 		return nil, err
 	}
 	return nm, nil
+}
+
+func (n *NameMap) List() []string {
+	list := make([]string, 0, len(n.cache))
+	for k := range n.cache {
+		list = append(list, k.String())
+	}
+	return list
 }
 
 func (n *NameMap) checkIno(ino int32) {
@@ -87,6 +106,7 @@ func (n *NameMap) AddIno(name string, ino int32) error {
 	if _, err := n.fd.Write(buf); err != nil {
 		return err
 	}
+	n.fd.Sync()
 	return nil
 }
 

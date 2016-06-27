@@ -12,6 +12,8 @@ import (
 type FlushDelegate interface {
 	ReadData(off int64, n int) ([]byte, error)
 	io.WriterAt
+
+	UpdateCheckpoint(cp int64)
 }
 
 type Flusher struct {
@@ -212,6 +214,7 @@ flush:
 	}
 
 	f.offset += int64(len(buffer))
+	f.delegate.UpdateCheckpoint(f.offset)
 	for _, op := range fb.ops() {
 		if op == nil {
 			continue
