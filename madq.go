@@ -5,10 +5,12 @@ import (
 	"github.com/chzyer/flow"
 	"github.com/chzyer/logex"
 	"github.com/chzyer/madq/go/bench"
+	"github.com/chzyer/madq/go/debug"
 )
 
 type Madq struct {
 	Bench *bench.Config `flagly:"handler"`
+	Debug *debug.Config `flagly:"handler"`
 }
 
 func main() {
