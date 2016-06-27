@@ -1,2 +1,1 @@
-# mmq
-multiplex message queue
+# madq
