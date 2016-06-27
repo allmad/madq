@@ -37,10 +37,16 @@ func (cfg *FSBrowserCmdStat) FlaglyHandle(vol *fs.Volume) {
 	}
 }
 
-func (cfg *FSBrowserCmdStat) StatFile(vol *fs.Volume, fd *fs.File) {
+func (cfg *FSBrowserCmdStat) StatFile(vol *fs.Volume, fd *fs.Handle) {
 	buf := bytes.NewBuffer(nil)
+	inode, err := fd.Stat()
+	if err != nil {
+		println(err.Error())
+		return
+	}
 
 	fmt.Fprintf(buf, "name: %v\n", fd.Name())
+	fmt.Fprintf(buf, "mtime: %v\n", inode.Mtime.Get())
 	fmt.Fprintf(buf, "size: %v (%v)\n", fd.Size(), ptrace.Unit(fd.Size()))
 
 	os.Stderr.Write(buf.Bytes())
