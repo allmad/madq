@@ -51,7 +51,8 @@ func (r RatioSize) String() string {
 		return "NaN"
 	}
 	ratio := float64(r.Size) / float64(r.Count)
-	return fmt.Sprintf("%v (%v/%v)", Unit(int64(ratio)), r.Size, r.Count)
+	return fmt.Sprintf("%v (%v/%v)",
+		Unit(int64(ratio)), r.Size, r.Count)
 }
 
 func (r *RatioSize) MarshalJSON() ([]byte, error) {
@@ -121,8 +122,8 @@ func (s *Size) Add(n int64) int64 {
 	return (*Int)(s).Add(n)
 }
 
-func (i *Size) String() string {
-	return Unit(atomic.LoadInt64((*int64)(i)))
+func (i Size) String() string {
+	return Unit(int64(i))
 }
 
 func (i *Size) MarshalJSON() ([]byte, error) {
