@@ -2,7 +2,6 @@ package fs
 
 import (
 	"fmt"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -21,6 +20,8 @@ type Cobuffer struct {
 
 	writeChan     chan struct{}
 	writeChanSent int32
+	writeTime     time.Time
+	waiter        sync.WaitGroup
 }
 
 func NewCobuffer(n int, maxSize int) *Cobuffer {
@@ -47,6 +48,7 @@ func (c *Cobuffer) grow() bool {
 		goto exit
 	}
 	c.buffer = append(c.buffer, 0)
+	c.buffer = c.buffer[:cap(c.buffer)]
 	success = true
 
 exit:
@@ -63,6 +65,7 @@ func (c *Cobuffer) Flush() {
 	case c.flushChan <- struct{}{}:
 	default:
 	}
+	c.waiter.Add(1)
 }
 
 func (c *Cobuffer) IsWritten() <-chan struct{} {
@@ -92,7 +95,9 @@ func (c *Cobuffer) GetData(buffer []byte) int {
 	c.wantFlushTime = time.Now()
 
 	atomic.StoreInt32(&c.writeChanSent, 0)
-	atomic.StoreInt32(&c.flushChanSent, 0)
+	if atomic.SwapInt32(&c.flushChanSent, 0) == 1 {
+		c.waiter.Done()
+	}
 	c.rw.Unlock()
 	return n
 }
@@ -107,7 +112,9 @@ func (c *Cobuffer) WriteData(b []byte) {
 		tryTime++
 		if !c.grow() {
 			c.Flush()
-			runtime.Gosched()
+			c.waiter.Wait()
+		} else {
+			// println(tryTime)
 		}
 	}
 }
@@ -118,6 +125,7 @@ func (c *Cobuffer) writeData(b []byte) bool {
 	}
 
 	success := false
+	now := time.Now()
 
 	c.rw.RLock()
 
@@ -131,6 +139,7 @@ func (c *Cobuffer) writeData(b []byte) bool {
 	success = true
 
 	if atomic.CompareAndSwapInt32(&c.writeChanSent, 0, 1) {
+		c.writeTime = time.Now()
 		select {
 		case c.writeChan <- struct{}{}:
 		default:
@@ -139,11 +148,15 @@ func (c *Cobuffer) writeData(b []byte) bool {
 
 	Stat.Cobuffer.NotifyFlushByWrite.HitIf(int(newOff) > c.maxSize/2)
 	if int(newOff) > c.maxSize/2 {
+		if !c.isWantFlush() {
+			Stat.Cobuffer.FullTime.AddNow(c.writeTime)
+		}
 		c.Flush()
 	}
 
 exit:
 	c.rw.RUnlock()
+	Stat.Cobuffer.WriteTime.AddNow(now)
 	return success
 }
 
