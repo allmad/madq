@@ -28,7 +28,7 @@ func BenchmarkCobuffer(b *testing.B) {
 
 			for {
 				n := buf.GetData(buffer)
-				if n > 0 {
+				if n > len(buffer) {
 					buffer = make([]byte, n)
 				} else {
 					break

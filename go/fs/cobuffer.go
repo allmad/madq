@@ -113,8 +113,6 @@ func (c *Cobuffer) WriteData(b []byte) {
 		if !c.grow() {
 			c.Flush()
 			c.waiter.Wait()
-		} else {
-			// println(tryTime)
 		}
 	}
 }
