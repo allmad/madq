@@ -12,6 +12,10 @@ type RatioTime struct {
 }
 
 func (r *RatioTime) AddNow(t time.Time) {
+	if t.IsZero() {
+		return
+	}
+
 	r.Duration += time.Now().Sub(t)
 	r.Count.Add(1)
 }
