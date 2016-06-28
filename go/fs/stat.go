@@ -40,6 +40,8 @@ type GStat struct {
 		GetDataLock        ptrace.RatioTime
 		GetData            ptrace.RatioTime
 		FlushDelay         ptrace.RatioTime
+		FullTime           ptrace.RatioTime
+		WriteTime          ptrace.RatioTime
 	}
 }
 
