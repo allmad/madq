@@ -28,6 +28,15 @@ func (cfg *FsFile) FlaglyHandle(f *flow.Flow) error {
 	defer f.Close()
 
 	now := time.Now()
+	var size ptrace.Size
+	size.AddInt(cfg.BlockSize * cfg.BenchCnt)
+
+	defer func() {
+		duration := time.Now().Sub(now)
+
+		println(fs.Stat.String())
+		println(size.Rate(duration).String())
+	}()
 
 	volcfg := &fs.VolumeConfig{}
 
@@ -56,17 +65,10 @@ func (cfg *FsFile) FlaglyHandle(f *flow.Flow) error {
 
 	buf := make([]byte, cfg.BlockSize)
 	rand.Read(buf)
-	var size ptrace.Size
-
-	size.AddInt(len(buf) * cfg.BenchCnt)
 
 	for i := 0; i < cfg.BenchCnt; i++ {
 		fd.Write(buf)
 	}
 	fd.Sync()
-	duration := time.Now().Sub(now)
-
-	println(fs.Stat.String())
-	println(size.Rate(duration).String())
 	return nil
 }
