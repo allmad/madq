@@ -107,28 +107,27 @@ loop:
 		select {
 		case <-f.cobuf.IsWritten():
 			timer = time.NewTimer(f.cfg.FlushInterval).C
+			flushStart = time.Now()
+			continue
 		case <-f.cobuf.IsFlush():
-			goto flush
 		case <-timer:
-			goto flush
 		case <-f.flushChan:
 			wantFlush = true
-			f.cobuf.Flush()
 		case err := <-flushReply:
 			if err != nil {
 				logex.Error("write error:", err)
 			}
+			continue
 		case <-f.flow.IsClose():
 			break loop
 		}
-		continue
 
-	flush:
+		Stat.File.FlushDuration.AddNow(flushStart)
 		n := f.cobuf.GetData(buffer)
-		if n > len(buffer) {
+		for n > len(buffer) {
 			Stat.File.RegenBuffer.Hit()
 			buffer = make([]byte, n)
-			goto flush
+			n = f.cobuf.GetData(buffer)
 		}
 
 		Stat.File.FlushSize.AddBuf(buffer[:n])
@@ -137,8 +136,6 @@ loop:
 			f.flushWaiter.Done()
 			wantFlush = false
 		}
-		Stat.File.FlushDuration.AddNow(flushStart)
-		flushStart = time.Now()
 	}
 }
 
