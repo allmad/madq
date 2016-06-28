@@ -38,10 +38,6 @@ func (c *Cobuffer) isWantFlush() bool {
 }
 
 func (c *Cobuffer) grow() bool {
-	if c.isWantFlush() {
-		return false
-	}
-
 	success := false
 	c.rw.Lock()
 	if len(c.buffer) >= c.maxSize {
@@ -118,10 +114,6 @@ func (c *Cobuffer) WriteData(b []byte) {
 }
 
 func (c *Cobuffer) writeData(b []byte) bool {
-	if c.isWantFlush() { // avoid RLock
-		return false
-	}
-
 	success := false
 	now := time.Now()
 
@@ -144,12 +136,14 @@ func (c *Cobuffer) writeData(b []byte) bool {
 		}
 	}
 
-	Stat.Cobuffer.NotifyFlushByWrite.HitIf(int(newOff) > c.maxSize/2)
 	if int(newOff) > c.maxSize/2 {
 		if !c.isWantFlush() {
+			Stat.Cobuffer.NotifyFlushByWrite.Hit()
 			Stat.Cobuffer.FullTime.AddNow(c.writeTime)
 		}
 		c.Flush()
+	} else {
+		Stat.Cobuffer.NotifyFlushByWrite.Miss()
 	}
 
 exit:

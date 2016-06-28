@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -33,7 +34,7 @@ type FileDelegater interface {
 }
 
 type FileFlusher interface {
-	WriteByInode(*InodePool, []byte, chan error)
+	WriteByInode(*InodePool, []byte, chan int)
 	Flush()
 }
 
@@ -95,14 +96,15 @@ func (f *File) writeLoop() {
 	defer f.flow.DoneAndClose()
 	var (
 		wantFlush bool
+		wantClose bool
 		timer     <-chan time.Time
 
-		flushReply = make(chan error, 100)
+		flushReply = make(chan int, 100)
 		flushStart = time.Now()
 		buffer     []byte
+		bufferOps  int
 	)
 
-loop:
 	for {
 		select {
 		case <-f.cobuf.IsWritten():
@@ -114,12 +116,14 @@ loop:
 		case <-f.flushChan:
 			wantFlush = true
 		case err := <-flushReply:
-			if err != nil {
-				logex.Error("write error:", err)
-			}
+			bufferOps -= err
+			//if err != nil {
+			//	logex.Error("write error:", err)
+			//}
 			continue
 		case <-f.flow.IsClose():
-			break loop
+			// println("want close")
+			wantClose = true
 		}
 
 		Stat.File.FlushDuration.AddNow(flushStart)
@@ -130,11 +134,23 @@ loop:
 			n = f.cobuf.GetData(buffer)
 		}
 
-		Stat.File.FlushSize.AddBuf(buffer[:n])
-		f.flusher.WriteByInode(f.inodePool, buffer[:n], flushReply)
+		if n > 0 {
+			Stat.File.FlushSize.AddBuf(buffer[:n])
+			f.flusher.WriteByInode(f.inodePool, buffer[:n], flushReply)
+			bufferOps++
+		}
 		if wantFlush {
 			f.flushWaiter.Done()
 			wantFlush = false
+		}
+		if wantClose {
+			// println("file: remain ops:", bufferOps)
+			// now := time.Now()
+			for bufferOps > 0 {
+				bufferOps -= <-flushReply
+			}
+			// println("file wait time:", time.Now().Sub(now).String())
+			break
 		}
 	}
 }
@@ -198,6 +214,9 @@ getOffset:
 }
 
 func (f *File) Write(b []byte) (int, error) {
+	if f.flow.IsClosed() {
+		return 0, fmt.Errorf("closed")
+	}
 	f.cobuf.WriteData(b)
 	return len(b), nil
 }
@@ -244,7 +263,10 @@ func (f *File) Close() error {
 		return nil
 	}
 
+	now := time.Now()
+
 	f.flow.Close()
 	f.cobuf.Close()
+	Stat.File.CloseTime.AddNow(now)
 	return nil
 }

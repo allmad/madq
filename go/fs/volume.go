@@ -196,12 +196,14 @@ func (v *Volume) CleanCache() {
 }
 
 func (v *Volume) Close() {
-	v.flusher.Close()
+	now := time.Now()
 	v.nameMap.Close()
+	v.flusher.Close()
 	v.flow.Close()
 	if err := v.header.Flush(v.delegate); err != nil {
 		println("volume header flush error:", err.Error())
 	}
+	Stat.Volume.CloseTime.AddNow(now)
 }
 
 // -----------------------------------------------------------------------------

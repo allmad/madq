@@ -9,16 +9,29 @@ import (
 var Stat GStat
 
 type GStat struct {
+	Volume struct {
+		CloseTime ptrace.RatioTime
+	}
 	Flusher struct {
-		BlockCopy   ptrace.Size
-		FlushTime   ptrace.Int
-		FlushSize   ptrace.RatioSize
-		ReadTime    ptrace.RatioTime
-		WriteTime   ptrace.RatioTime
-		HandleOp    ptrace.RatioTime
-		FlushLoop   ptrace.RatioTime
-		FlushBuffer ptrace.RatioTime
-		Flush       ptrace.RatioTime
+		BlockCopy         ptrace.Size
+		FlushTime         ptrace.Int
+		FlushSize         ptrace.RatioSize
+		ReadTime          ptrace.RatioTime
+		WriteTime         ptrace.RatioTime
+		HandleOp          ptrace.RatioTime
+		HandleOpData      ptrace.RatioTime
+		HandleOpDataWrite ptrace.RatioTime
+		HandleOpPartial   ptrace.RatioTime
+		HandleOpInode     ptrace.RatioTime
+		FlushLoop         ptrace.RatioTime
+		FlushBuffer       ptrace.RatioTime
+		FlushBufferGetOp  ptrace.RatioTime
+		Flush             ptrace.RatioTime
+		CloseTime         ptrace.RatioTime
+		CloseFlush        ptrace.RatioTime
+		FlushBufferAddOp  ptrace.RatioTime
+		DataSlice         struct {
+		}
 	}
 	Inode struct {
 		Cache struct {
@@ -33,6 +46,7 @@ type GStat struct {
 		FlushSize     ptrace.RatioSize
 		FlushDuration ptrace.RatioTime
 		RegenBuffer   ptrace.Ratio
+		CloseTime     ptrace.RatioTime
 	}
 	Cobuffer struct {
 		Trytime            ptrace.Ratio

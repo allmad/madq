@@ -126,7 +126,11 @@ writePayload:
 		Stat.Flusher.BlockCopy.AddInt(len(oldData))
 	}
 
-	op.data.WriteData(dw, BlockSize-blkSize)
+	{
+		now := time.Now()
+		op.data.WriteData(dw, BlockSize-blkSize)
+		Stat.Flusher.HandleOpDataWrite.AddNow(now)
+	}
 
 	ino.SetOffset(idx, dataAddr, BlockSize-blkSize)
 	if len(inos) == 0 || inos[len(inos)-1] != ino {
@@ -148,6 +152,7 @@ func (f *Flusher) handleOps(data []byte, ops []*flushItem) int64 {
 	// > how to fsck ? follow a MagicEOF
 	dw := NewDiskWriter(data)
 
+	n1 := time.Now()
 	// in data area
 	for idx, op := range ops {
 		dw.Mark()
@@ -158,7 +163,9 @@ func (f *Flusher) handleOps(data []byte, ops []*flushItem) int64 {
 			continue
 		}
 	}
+	Stat.Flusher.HandleOpData.AddNow(n1)
 
+	n1 = time.Now()
 	// in partial area
 	for idx, op := range ops {
 		if op == nil {
@@ -175,7 +182,9 @@ func (f *Flusher) handleOps(data []byte, ops []*flushItem) int64 {
 			continue
 		}
 	}
+	Stat.Flusher.HandleOpPartial.AddNow(n1)
 
+	n1 = time.Now()
 	// write inode
 	for _, op := range ops {
 		if op == nil {
@@ -188,6 +197,7 @@ func (f *Flusher) handleOps(data []byte, ops []*flushItem) int64 {
 			op.inoPool.OnFlush(ino, inoAddr)
 		}
 	}
+	Stat.Flusher.HandleOpInode.AddNow(n1)
 
 	// send reply to ops in flush()
 
@@ -212,6 +222,7 @@ func (f *Flusher) flush(fb *flushBuffer) {
 flush:
 	{
 		now := time.Now()
+		// println("flusher: flush", len(buffer), "ops:", fb.ops()[0].opCnt)
 		_, err = f.delegate.WriteAt(buffer, f.offset)
 		Stat.Flusher.WriteTime.AddNow(now)
 	}
@@ -258,60 +269,66 @@ func (f *Flusher) loop() {
 	fb.init()
 	timer.Stop()
 	wantFlush := false
+	wantClose := false
 
-loop:
 	for {
 		select {
 		case op := <-f.opChan:
-			now := time.Now()
 			fb.addOp(op)
 			timer.Reset(f.interval)
+			now := time.Now()
 
 			if !wantFlush {
-			buffering:
 				for {
 					select {
-					case <-timer.C:
-						break buffering
 					case <-f.flushChan:
 						wantFlush = true
-						break buffering
 					case op := <-f.opChan:
-						if !fb.addOp(op) {
-							break buffering
+						Stat.Flusher.FlushBufferGetOp.AddNow(now)
+						if fb.addOp(op) {
+							continue
 						}
+					default:
+						// TODO: check (use default instead of timer)
+						// why using timer is much slower
+						// is there a better to buffering data in period time
 					}
+					break
 				}
 			}
 
 			Stat.Flusher.FlushBuffer.AddNow(now)
 
-			f.flush(&fb)
-			if wantFlush {
-				f.flushWaiter.Done()
-				wantFlush = false
-			}
-			Stat.Flusher.FlushLoop.AddNow(now)
 		case <-f.flushChan:
 			if len(f.opChan) != 0 {
 				wantFlush = true
 			} else {
 				f.flushWaiter.Done()
+				continue
 			}
-
 		case <-f.flow.IsClose():
-			break loop
+			wantClose = true
+			// println("flusher: want close, flush remain data,")
+		}
+
+		f.flush(&fb)
+		if wantFlush {
+			f.flushWaiter.Done()
+			wantFlush = false
+		}
+		if wantClose {
+			break
 		}
 	}
 }
 
 type flusherWriteOp struct {
 	inoPool *InodePool
-	done    chan error
+	done    chan int
 	data    []byte
 }
 
-func (f *Flusher) WriteByInode(inoPool *InodePool, data []byte, done chan error) {
+func (f *Flusher) WriteByInode(inoPool *InodePool, data []byte, done chan int) {
 	f.opChan <- &flusherWriteOp{inoPool: inoPool, data: data, done: done}
 }
 
@@ -320,28 +337,35 @@ func (f *Flusher) Close() {
 		return
 	}
 
+	now := time.Now()
 	f.flow.Close()
 	close(f.opChan)
+	// println("flusher closed")
 
 	var fb flushBuffer
 	fb.init()
 	for op := range f.opChan {
-		fb.addOp(op)
+		if !fb.addOp(op) {
+			f.flush(&fb)
+			fb.reset()
+		}
 	}
-	f.flush(&fb)
+	Stat.Flusher.CloseTime.AddNow(now)
 }
 
 type flushItem struct {
 	tmpInodes []*Inode
 	inoPool   *InodePool
-	done      []chan error
+	done      chan int
+	opCnt     int
 	data      *DataSlice
 }
 
 func (f *flushItem) sendDone(err error) {
-	for _, d := range f.done {
-		d <- err
+	if err != nil {
+		println("error:", err.Error())
 	}
+	f.done <- f.opCnt
 }
 
 type flushBuffer struct {
@@ -366,15 +390,17 @@ func (f *flushBuffer) findOp(op *flusherWriteOp) int {
 // return false to flush
 func (f *flushBuffer) addOp(op *flusherWriteOp) bool {
 	// if multiple op belong to same file?
+	now := time.Now()
 	idx := f.findOp(op)
 	if idx >= 0 {
 		bop := f.bufferingOps[idx]
 		bop.data.Append(op.data)
-		bop.done = append(bop.done, op.done)
+		bop.opCnt++
 	} else {
 		f.bufferingOps = append(f.bufferingOps, &flushItem{
 			inoPool: op.inoPool,
-			done:    []chan error{op.done},
+			done:    op.done,
+			opCnt:   1,
 			data:    NewDataSlice(op.data),
 		})
 	}
@@ -392,6 +418,7 @@ func (f *flushBuffer) addOp(op *flusherWriteOp) bool {
 	if f.bufferingSize >= 20<<20 {
 		return false
 	}
+	Stat.Flusher.FlushBufferAddOp.AddNow(now)
 	return true
 }
 
