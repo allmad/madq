@@ -1,6 +1,8 @@
 package main
 
 import (
+	"runtime"
+
 	"github.com/chzyer/flagly"
 	"github.com/chzyer/flow"
 	"github.com/chzyer/logex"
@@ -9,8 +11,13 @@ import (
 )
 
 type Madq struct {
+	CPU   int
 	Bench *bench.Config `flagly:"handler"`
 	Debug *debug.Config `flagly:"handler"`
+}
+
+func (m *Madq) FlaglyEnter() {
+	runtime.GOMAXPROCS(m.CPU)
 }
 
 func main() {
