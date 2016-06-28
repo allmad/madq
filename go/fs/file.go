@@ -10,11 +10,6 @@ import (
 	"github.com/chzyer/logex"
 )
 
-type fileWriteOp struct {
-	b     []byte
-	reply chan error
-}
-
 type File struct {
 	ref      int32
 	refGuard sync.Mutex
@@ -30,7 +25,6 @@ type File struct {
 
 	flushWaiter sync.WaitGroup
 	flushChan   chan struct{}
-	writeChan   chan *fileWriteOp
 }
 
 type FileDelegater interface {
@@ -80,7 +74,6 @@ func NewFile(f *flow.Flow, cfg *FileConfig) (*File, error) {
 		cobuf:     NewCobuffer(1<<10, cfg.FlushSize),
 
 		flushChan: make(chan struct{}, 1),
-		writeChan: make(chan *fileWriteOp, 8),
 	}
 	f.SetOnClose(func() {
 		file.Close()
@@ -205,13 +198,6 @@ getOffset:
 	off += int64(readBytes)
 
 	goto getOffset
-}
-
-func (f *File) WriteData(b []byte, reply chan error) {
-	f.writeChan <- &fileWriteOp{
-		b:     b,
-		reply: reply,
-	}
 }
 
 func (f *File) Write(b []byte) (int, error) {

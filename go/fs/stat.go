@@ -10,11 +10,15 @@ var Stat GStat
 
 type GStat struct {
 	Flusher struct {
-		BlockCopy ptrace.Size
-		FlushTime ptrace.Int
-		FlushSize ptrace.RatioSize
-		ReadTime  ptrace.RatioTime
-		WriteTime ptrace.RatioTime
+		BlockCopy   ptrace.Size
+		FlushTime   ptrace.Int
+		FlushSize   ptrace.RatioSize
+		ReadTime    ptrace.RatioTime
+		WriteTime   ptrace.RatioTime
+		HandleOp    ptrace.RatioTime
+		FlushLoop   ptrace.RatioTime
+		FlushBuffer ptrace.RatioTime
+		Flush       ptrace.RatioTime
 	}
 	Inode struct {
 		Cache struct {

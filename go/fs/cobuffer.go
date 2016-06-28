@@ -113,7 +113,7 @@ func (c *Cobuffer) WriteData(b []byte) {
 }
 
 func (c *Cobuffer) writeData(b []byte) bool {
-	if c.isWantFlush() {
+	if c.isWantFlush() { // avoid RLock
 		return false
 	}
 

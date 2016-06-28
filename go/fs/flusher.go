@@ -59,7 +59,7 @@ func (f *Flusher) handleOpInPartialArea(dw *DiskWriter, op *flushItem) error {
 	dataAddr := ShortAddr(f.getAddr(dw.Written()))
 
 	if blkSize > 0 {
-		// ino.Offsets[idx] maybe in memory
+		// ino.Offsets[idx] can't in memory
 		now := time.Now()
 		oldData, err := f.delegate.ReadData(int64(ino.Offsets[idx]), blkSize)
 		Stat.Flusher.ReadTime.AddNow(now)
@@ -140,6 +140,7 @@ exit:
 }
 
 func (f *Flusher) handleOps(data []byte, ops []*flushItem) int64 {
+	now := time.Now()
 	// p: payload, ino: inode, b: block, pp: partial payload
 	// | data area | partial area            |
 	// | b1 | b2   | b3                      |
@@ -191,6 +192,7 @@ func (f *Flusher) handleOps(data []byte, ops []*flushItem) int64 {
 	// send reply to ops in flush()
 
 	dw.WriteBytes(MagicEOF)
+	Stat.Flusher.HandleOp.AddNow(now)
 	return dw.Written()
 }
 
@@ -201,6 +203,7 @@ func (f *Flusher) flush(fb *flushBuffer) {
 	Stat.Flusher.FlushTime.Add(1)
 
 	var err error
+	start := time.Now()
 	buffer := fb.alloc()
 	written := f.handleOps(buffer, fb.ops())
 	buffer = buffer[:written]
@@ -233,13 +236,16 @@ flush:
 	Stat.Flusher.FlushSize.AddBuf(buffer)
 	f.offset += int64(len(buffer))
 	f.delegate.UpdateCheckpoint(f.offset)
+
 	for _, op := range fb.ops() {
 		if op == nil {
 			continue
 		}
 		op.sendDone(nil)
 	}
+
 	fb.reset()
+	Stat.Flusher.Flush.AddNow(start)
 }
 
 func (f *Flusher) loop() {
@@ -257,6 +263,7 @@ loop:
 	for {
 		select {
 		case op := <-f.opChan:
+			now := time.Now()
 			fb.addOp(op)
 			timer.Reset(f.interval)
 
@@ -277,11 +284,14 @@ loop:
 				}
 			}
 
+			Stat.Flusher.FlushBuffer.AddNow(now)
+
 			f.flush(&fb)
 			if wantFlush {
 				f.flushWaiter.Done()
 				wantFlush = false
 			}
+			Stat.Flusher.FlushLoop.AddNow(now)
 		case <-f.flushChan:
 			if len(f.opChan) != 0 {
 				wantFlush = true
