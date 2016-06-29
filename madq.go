@@ -11,7 +11,7 @@ import (
 )
 
 type Madq struct {
-	CPU   int
+	CPU   int           `default:"1"`
 	Bench *bench.Config `flagly:"handler"`
 	Debug *debug.Config `flagly:"handler"`
 }
