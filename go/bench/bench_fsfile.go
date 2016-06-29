@@ -14,6 +14,7 @@ import (
 )
 
 type FsFile struct {
+	Trace     bool
 	Mem       bool
 	BenchCnt  int    `name:"count" desc:"bench size" default:"200"`
 	BlockSize int    `name:"bs" desc:"block size" default:"200"`
@@ -26,6 +27,11 @@ func (f *FsFile) FlaglyDesc() string {
 
 func (cfg *FsFile) FlaglyHandle(f *flow.Flow) error {
 	defer f.Close()
+
+	if cfg.Trace {
+		EnableTrace()
+		defer DisableTrace()
+	}
 
 	now := time.Now()
 	var size ptrace.Size
