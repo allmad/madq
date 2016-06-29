@@ -82,11 +82,13 @@ func (f *Flusher) handleOpInPartialArea(dw *DiskWriter, op *flushItem) error {
 	return nil
 }
 
-func (f *Flusher) Flush() {
+func (f *Flusher) Flush(wait bool) {
 	f.flushWaiter.Add(1)
 	select {
 	case f.flushChan <- struct{}{}:
-		f.flushWaiter.Wait()
+		if wait {
+			f.flushWaiter.Wait()
+		}
 	default:
 		f.flushWaiter.Done()
 	}

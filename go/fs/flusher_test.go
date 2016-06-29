@@ -76,7 +76,7 @@ func TestFlusherBigRW(t *testing.T) {
 	testTime := 10
 	for i := 0; i < testTime; i++ {
 		flusher.WriteByInode(ipool0, expect, done)
-		flusher.Flush()
+		flusher.Flush(false)
 		test.Nil(<-done)
 	}
 }
@@ -108,7 +108,7 @@ func BenchmarkFlusher(b *testing.B) {
 		flusher.WriteByInode(ipool, buf, done)
 		b.SetBytes(int64(len(buf)))
 	}
-	flusher.Flush()
+	flusher.Flush(true)
 }
 
 func TestFlusher(t *testing.T) {
@@ -126,7 +126,7 @@ func TestFlusher(t *testing.T) {
 		ipool0.InitInode()
 		done := make(chan error, 1)
 		flusher.WriteByInode(ipool0, []byte("hello"), done)
-		flusher.Flush()
+		flusher.Flush(true)
 		test.Nil(<-done)
 	}
 	{
@@ -142,7 +142,7 @@ func TestFlusher(t *testing.T) {
 		done := make(chan error, 1)
 		tmpdata := test.SeqBytes((256 << 10) + 10)
 		flusher.WriteByInode(ipool0, tmpdata, done)
-		flusher.Flush()
+		flusher.Flush(true)
 		test.Nil(<-done)
 		test.Equal(inode.Size, Int32((256<<10)+10+5))
 

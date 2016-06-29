@@ -35,7 +35,7 @@ type FileDelegater interface {
 
 type FileFlusher interface {
 	WriteByInode(*InodePool, []byte, chan int)
-	Flush()
+	Flush(wait bool)
 }
 
 type FileConfig struct {
@@ -113,10 +113,9 @@ func (f *File) writeLoop() {
 			continue
 		case <-f.cobuf.IsFlush():
 		case <-timer:
+			// println("file: timeout", time.Now().Sub(flushStart).String())
 		case <-f.flushChan:
 			wantFlush = true
-			f.cobuf.Flush()
-			continue
 		case err := <-flushReply:
 			bufferOps -= err
 			//if err != nil {
@@ -127,6 +126,7 @@ func (f *File) writeLoop() {
 			// println("want close")
 			wantClose = true
 		}
+		timer = nil
 
 		Stat.File.Loop.BufferDuration.AddNow(flushStart)
 		n := f.cobuf.GetData(buffer)
@@ -146,7 +146,7 @@ func (f *File) writeLoop() {
 			Stat.File.Flush.WaitSize.HitN(bufferOps)
 			if bufferOps > 0 {
 				// println("file: flush them")
-				f.flusher.Flush()
+				f.flusher.Flush(false)
 				// println("file: done with flush")
 			}
 			for bufferOps > 0 {
