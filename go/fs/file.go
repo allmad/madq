@@ -115,6 +115,8 @@ func (f *File) writeLoop() {
 		case <-timer:
 		case <-f.flushChan:
 			wantFlush = true
+			f.cobuf.Flush()
+			continue
 		case err := <-flushReply:
 			bufferOps -= err
 			//if err != nil {
@@ -126,7 +128,7 @@ func (f *File) writeLoop() {
 			wantClose = true
 		}
 
-		Stat.File.FlushDuration.AddNow(flushStart)
+		Stat.File.Loop.BufferDuration.AddNow(flushStart)
 		n := f.cobuf.GetData(buffer)
 		for n > len(buffer) {
 			Stat.File.RegenBuffer.Hit()
@@ -142,6 +144,11 @@ func (f *File) writeLoop() {
 		if wantFlush {
 			now := time.Now()
 			Stat.File.Flush.WaitSize.HitN(bufferOps)
+			if bufferOps > 0 {
+				// println("file: flush them")
+				f.flusher.Flush()
+				// println("file: done with flush")
+			}
 			for bufferOps > 0 {
 				bufferOps -= <-flushReply
 			}
@@ -228,6 +235,7 @@ func (f *File) Write(b []byte) (int, error) {
 }
 
 func (f *File) Sync() {
+	// println("file: want sync")
 	f.flushWaiter.Add(1)
 	select {
 	case f.flushChan <- struct{}{}:
@@ -235,8 +243,6 @@ func (f *File) Sync() {
 	default:
 		f.flushWaiter.Done()
 	}
-
-	f.flusher.Flush()
 }
 
 func (f *File) AddRef() bool {
