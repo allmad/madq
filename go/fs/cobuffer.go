@@ -42,6 +42,7 @@ func (c *Cobuffer) grow() bool {
 		return false
 	}
 
+	now := time.Now()
 	c.rw.Lock()
 	if len(c.buffer) >= c.maxSize {
 		c.rw.Unlock()
@@ -50,6 +51,7 @@ func (c *Cobuffer) grow() bool {
 	c.buffer = append(c.buffer, 0)
 	c.buffer = c.buffer[:cap(c.buffer)]
 	c.rw.Unlock()
+	Stat.Cobuffer.Grow.AddNow(now)
 	return true
 }
 
@@ -143,10 +145,11 @@ func (c *Cobuffer) writeData(b []byte) bool {
 
 	if int(newOff) > c.maxSize/2 {
 		if !c.isWantFlush() {
+			// println("cobuffer: need flush")
 			Stat.Cobuffer.NotifyFlushByWrite.Hit()
 			Stat.Cobuffer.FullTime.AddNow(c.writeTime)
+			c.Flush()
 		}
-		c.Flush()
 	} else {
 		Stat.Cobuffer.NotifyFlushByWrite.Miss()
 	}
