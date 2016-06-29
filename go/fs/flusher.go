@@ -129,7 +129,7 @@ writePayload:
 	{
 		now := time.Now()
 		op.data.WriteData(dw, BlockSize-blkSize)
-		Stat.Flusher.HandleOpDataWrite.AddNow(now)
+		Stat.Flusher.HandleOp.DataAreaCopy.AddNow(now)
 	}
 
 	ino.SetOffset(idx, dataAddr, BlockSize-blkSize)
@@ -163,7 +163,7 @@ func (f *Flusher) handleOps(data []byte, ops []*flushItem) int64 {
 			continue
 		}
 	}
-	Stat.Flusher.HandleOpData.AddNow(n1)
+	Stat.Flusher.HandleOp.DataArea.AddNow(n1)
 
 	n1 = time.Now()
 	// in partial area
@@ -182,7 +182,7 @@ func (f *Flusher) handleOps(data []byte, ops []*flushItem) int64 {
 			continue
 		}
 	}
-	Stat.Flusher.HandleOpPartial.AddNow(n1)
+	Stat.Flusher.HandleOp.Partial.AddNow(n1)
 
 	n1 = time.Now()
 	// write inode
@@ -197,12 +197,12 @@ func (f *Flusher) handleOps(data []byte, ops []*flushItem) int64 {
 			op.inoPool.OnFlush(ino, inoAddr)
 		}
 	}
-	Stat.Flusher.HandleOpInode.AddNow(n1)
+	Stat.Flusher.HandleOp.Inode.AddNow(n1)
 
 	// send reply to ops in flush()
 
 	dw.WriteBytes(MagicEOF)
-	Stat.Flusher.HandleOp.AddNow(now)
+	Stat.Flusher.HandleOp.Total.AddNow(now)
 	return dw.Written()
 }
 
@@ -210,7 +210,7 @@ func (f *Flusher) flush(fb *flushBuffer) {
 	if len(fb.ops()) == 0 {
 		return
 	}
-	Stat.Flusher.FlushTime.Add(1)
+	Stat.Flusher.Flush.Count.Add(1)
 
 	var err error
 	start := time.Now()
@@ -219,32 +219,35 @@ func (f *Flusher) flush(fb *flushBuffer) {
 	buffer = buffer[:written]
 
 	// write to disk
-flush:
-	{
-		now := time.Now()
-		// println("flusher: flush", len(buffer), "ops:", fb.ops()[0].opCnt)
-		_, err = f.delegate.WriteAt(buffer, f.offset)
-		Stat.Flusher.WriteTime.AddNow(now)
-	}
 
-	if err != nil {
-		logex.Error("error in write data, wait 1 sec:", err)
-		switch f.flow.CloseOrWait(time.Second) {
-		case flow.F_CLOSED:
-			for _, op := range fb.ops() {
-				if op == nil {
-					continue
-				}
-				op.sendDone(logex.Trace(err))
-			}
-			fb.reset()
-			return
-		case flow.F_TIMEOUT:
-			goto flush
+	for {
+		{
+			now := time.Now()
+			// println("flusher: flush", len(buffer), "ops:", fb.ops()[0].opCnt)
+			_, err = f.delegate.WriteAt(buffer, f.offset)
+			Stat.Flusher.Flush.RawWrite.AddNow(now)
 		}
+
+		if err != nil {
+			logex.Error("error in write data, wait 1 sec:", err)
+			switch f.flow.CloseOrWait(time.Second) {
+			case flow.F_CLOSED:
+				for _, op := range fb.ops() {
+					if op == nil {
+						continue
+					}
+					op.sendDone(logex.Trace(err))
+				}
+				fb.reset()
+				return
+			case flow.F_TIMEOUT:
+				continue
+			}
+		}
+		break
 	}
 
-	Stat.Flusher.FlushSize.AddBuf(buffer)
+	Stat.Flusher.Flush.Size.AddInt(len(buffer))
 	f.offset += int64(len(buffer))
 	f.delegate.UpdateCheckpoint(f.offset)
 
@@ -256,7 +259,7 @@ flush:
 	}
 
 	fb.reset()
-	Stat.Flusher.Flush.AddNow(start)
+	Stat.Flusher.Flush.Total.AddNow(start)
 }
 
 func (f *Flusher) loop() {
@@ -264,48 +267,48 @@ func (f *Flusher) loop() {
 
 	var (
 		fb    flushBuffer
-		timer = time.NewTimer(0)
+		timer <-chan time.Time
 	)
 	fb.init()
-	timer.Stop()
 	wantFlush := false
 	wantClose := false
+	_ = timer
 
 	for {
 		select {
 		case op := <-f.opChan:
 			fb.addOp(op)
-			timer.Reset(f.interval)
 			now := time.Now()
 
-			if !wantFlush {
-				for {
-					select {
-					case <-f.flushChan:
-						wantFlush = true
-					case op := <-f.opChan:
-						Stat.Flusher.FlushBufferGetOp.AddNow(now)
-						if fb.addOp(op) {
-							continue
-						}
-					default:
-						// TODO: check (use default instead of timer)
-						// why using timer is much slower
-						// is there a better to buffering data in period time
+			timer = time.NewTimer(f.interval).C
+			for {
+				select {
+				case op := <-f.opChan:
+					if fb.addOp(op) {
+						continue
 					}
-					break
+				case <-f.flushChan:
+					wantFlush = true
+					for {
+						select {
+						case op := <-f.opChan:
+							if !fb.addOp(op) {
+								f.flush(&fb)
+							}
+							continue
+						default:
+						}
+						break
+					}
+				case <-timer:
+					logex.Info("timeout", fb.bufferingSize, wantFlush)
 				}
+				break
 			}
 
+			Stat.Flusher.Buffering.Size.AddInt(fb.bufferingSize)
 			Stat.Flusher.FlushBuffer.AddNow(now)
 
-		case <-f.flushChan:
-			if len(f.opChan) != 0 {
-				wantFlush = true
-			} else {
-				f.flushWaiter.Done()
-				continue
-			}
 		case <-f.flow.IsClose():
 			wantClose = true
 			// println("flusher: want close, flush remain data,")
