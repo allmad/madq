@@ -38,18 +38,19 @@ func (c *Cobuffer) isWantFlush() bool {
 }
 
 func (c *Cobuffer) grow() bool {
-	success := false
+	if c.isWantFlush() {
+		return false
+	}
+
 	c.rw.Lock()
 	if len(c.buffer) >= c.maxSize {
-		goto exit
+		c.rw.Unlock()
+		return false
 	}
 	c.buffer = append(c.buffer, 0)
 	c.buffer = c.buffer[:cap(c.buffer)]
-	success = true
-
-exit:
 	c.rw.Unlock()
-	return success
+	return true
 }
 
 func (c *Cobuffer) Flush() {
@@ -75,18 +76,19 @@ func (c *Cobuffer) IsFlush() <-chan struct{} {
 func (c *Cobuffer) GetData(buffer []byte) int {
 	now := time.Now()
 	c.rw.Lock()
-	Stat.Cobuffer.GetDataLock.AddNow(now)
-	now = time.Now()
+	Stat.Cobuffer.GetData.Lock.AddNow(now)
 	n := int(c.offset)
 	if len(buffer) < n {
 		c.rw.Unlock()
 		return n
 	}
 
+	now = time.Now()
 	copy(buffer[:n], c.buffer)
 	c.offset = 0
+	Stat.Cobuffer.GetData.Copy.AddNow(now)
+	Stat.Cobuffer.GetData.Size.Add(int64(n))
 
-	Stat.Cobuffer.GetData.AddNow(now)
 	Stat.Cobuffer.FlushDelay.AddNow(c.wantFlushTime)
 	c.wantFlushTime = time.Now()
 
@@ -114,7 +116,10 @@ func (c *Cobuffer) WriteData(b []byte) {
 }
 
 func (c *Cobuffer) writeData(b []byte) bool {
-	success := false
+	if c.isWantFlush() {
+		return false
+	}
+
 	now := time.Now()
 
 	c.rw.RLock()
@@ -122,11 +127,11 @@ func (c *Cobuffer) writeData(b []byte) bool {
 	newOff := atomic.AddInt32(&c.offset, int32(len(b)))
 	if newOff >= int32(len(c.buffer)) {
 		atomic.AddInt32(&c.offset, -int32(len(b)))
-		goto exit
+		c.rw.RUnlock()
+		return false
 	}
 
 	copy(c.buffer[newOff-int32(len(b)):newOff], b)
-	success = true
 
 	if atomic.CompareAndSwapInt32(&c.writeChanSent, 0, 1) {
 		c.writeTime = time.Now()
@@ -146,10 +151,9 @@ func (c *Cobuffer) writeData(b []byte) bool {
 		Stat.Cobuffer.NotifyFlushByWrite.Miss()
 	}
 
-exit:
 	c.rw.RUnlock()
 	Stat.Cobuffer.WriteTime.AddNow(now)
-	return success
+	return true
 }
 
 func (c *Cobuffer) Close() {
