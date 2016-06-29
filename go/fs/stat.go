@@ -13,24 +13,29 @@ type GStat struct {
 		CloseTime ptrace.RatioTime
 	}
 	Flusher struct {
-		BlockCopy         ptrace.Size
-		FlushTime         ptrace.Int
-		FlushSize         ptrace.RatioSize
-		ReadTime          ptrace.RatioTime
-		WriteTime         ptrace.RatioTime
-		HandleOp          ptrace.RatioTime
-		HandleOpData      ptrace.RatioTime
-		HandleOpDataWrite ptrace.RatioTime
-		HandleOpPartial   ptrace.RatioTime
-		HandleOpInode     ptrace.RatioTime
-		FlushLoop         ptrace.RatioTime
-		FlushBuffer       ptrace.RatioTime
-		FlushBufferGetOp  ptrace.RatioTime
-		Flush             ptrace.RatioTime
-		CloseTime         ptrace.RatioTime
-		CloseFlush        ptrace.RatioTime
-		FlushBufferAddOp  ptrace.RatioTime
-		DataSlice         struct {
+		BlockCopy ptrace.Size
+		ReadTime  ptrace.RatioTime
+		HandleOp  struct {
+			Total        ptrace.RatioTime
+			DataArea     ptrace.RatioTime
+			DataAreaCopy ptrace.RatioTime
+			Partial      ptrace.RatioTime
+			Inode        ptrace.RatioTime
+		}
+		FlushBuffer      ptrace.RatioTime
+		FlushBufferGetOp ptrace.RatioTime
+		Buffering        struct {
+			Size ptrace.RatioSize
+		}
+		Flush struct {
+			Total    ptrace.RatioTime
+			Count    ptrace.Int
+			Size     ptrace.RatioSize
+			RawWrite ptrace.RatioTime
+		}
+		CloseTime        ptrace.RatioTime
+		FlushBufferAddOp ptrace.RatioTime
+		DataSlice        struct {
 		}
 	}
 	Inode struct {
@@ -43,19 +48,29 @@ type GStat struct {
 		PrevSeekCnt ptrace.Ratio
 	}
 	File struct {
-		FlushSize     ptrace.RatioSize
-		FlushDuration ptrace.RatioTime
-		RegenBuffer   ptrace.Ratio
-		CloseTime     ptrace.RatioTime
+		FlushSize   ptrace.RatioSize
+		RegenBuffer ptrace.Ratio
+		CloseTime   ptrace.RatioTime
+		Loop        struct {
+			BufferDuration ptrace.RatioTime
+		}
+		Flush struct {
+			WaitSize  ptrace.Ratio
+			WaitReply ptrace.RatioTime
+		}
 	}
 	Cobuffer struct {
 		Trytime            ptrace.Ratio
 		NotifyFlushByWrite ptrace.Ratio
-		GetDataLock        ptrace.RatioTime
-		GetData            ptrace.RatioTime
-		FlushDelay         ptrace.RatioTime
-		FullTime           ptrace.RatioTime
-		WriteTime          ptrace.RatioTime
+		GetData            struct {
+			Lock ptrace.RatioTime
+			Copy ptrace.RatioTime
+			Size ptrace.RatioSize
+		}
+		Grow       ptrace.RatioTime
+		FlushDelay ptrace.RatioTime
+		FullTime   ptrace.RatioTime
+		WriteTime  ptrace.RatioTime
 	}
 }
 
