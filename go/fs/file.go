@@ -140,6 +140,12 @@ func (f *File) writeLoop() {
 			bufferOps++
 		}
 		if wantFlush {
+			now := time.Now()
+			Stat.File.Flush.WaitSize.HitN(bufferOps)
+			for bufferOps > 0 {
+				bufferOps -= <-flushReply
+			}
+			Stat.File.Flush.WaitReply.AddNow(now)
 			f.flushWaiter.Done()
 			wantFlush = false
 		}
