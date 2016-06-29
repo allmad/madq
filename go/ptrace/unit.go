@@ -45,6 +45,10 @@ func (r *RatioSize) AddBuf(b []byte) {
 	r.Add(int64(len(b)))
 }
 
+func (r *RatioSize) AddInt(n int) {
+	r.Add(int64(n))
+}
+
 func (r *RatioSize) Add(s int64) {
 	r.Size.Add(s)
 	r.Count.Add(1)
