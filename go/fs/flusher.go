@@ -329,11 +329,16 @@ func (f *Flusher) loop() {
 
 type flusherWriteOp struct {
 	inoPool *InodePool
-	done    chan int
+	done    chan *FlusherWriteReply
 	data    []byte
 }
 
-func (f *Flusher) WriteByInode(inoPool *InodePool, data []byte, done chan int) {
+type FlusherWriteReply struct {
+	N   int
+	Err error
+}
+
+func (f *Flusher) WriteByInode(inoPool *InodePool, data []byte, done chan *FlusherWriteReply) {
 	f.opChan <- &flusherWriteOp{inoPool: inoPool, data: data, done: done}
 }
 
@@ -361,16 +366,13 @@ func (f *Flusher) Close() {
 type flushItem struct {
 	tmpInodes []*Inode
 	inoPool   *InodePool
-	done      chan int
+	done      chan *FlusherWriteReply
 	opCnt     int
 	data      *DataSlice
 }
 
 func (f *flushItem) sendDone(err error) {
-	if err != nil {
-		println("error:", err.Error())
-	}
-	f.done <- f.opCnt
+	f.done <- &FlusherWriteReply{f.opCnt, err}
 }
 
 type flushBuffer struct {

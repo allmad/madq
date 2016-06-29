@@ -34,7 +34,7 @@ type FileDelegater interface {
 }
 
 type FileFlusher interface {
-	WriteByInode(*InodePool, []byte, chan int)
+	WriteByInode(*InodePool, []byte, chan *FlusherWriteReply)
 	Flush(wait bool)
 }
 
@@ -99,7 +99,7 @@ func (f *File) writeLoop() {
 		wantClose bool
 		timer     <-chan time.Time
 
-		flushReply = make(chan int, 100)
+		flushReply = make(chan *FlusherWriteReply, 100)
 		flushStart = time.Now()
 		buffer     []byte
 		bufferOps  int
@@ -116,11 +116,11 @@ func (f *File) writeLoop() {
 			// println("file: timeout", time.Now().Sub(flushStart).String())
 		case <-f.flushChan:
 			wantFlush = true
-		case err := <-flushReply:
-			bufferOps -= err
-			//if err != nil {
-			//	logex.Error("write error:", err)
-			//}
+		case reply := <-flushReply:
+			bufferOps -= reply.N
+			if reply.Err != nil {
+				logex.Error("write error:", reply.Err)
+			}
 			continue
 		case <-f.flow.IsClose():
 			// println("want close")
@@ -150,7 +150,11 @@ func (f *File) writeLoop() {
 				// println("file: done with flush")
 			}
 			for bufferOps > 0 {
-				bufferOps -= <-flushReply
+				reply := <-flushReply
+				bufferOps -= reply.N
+				if reply.Err != nil {
+					logex.Error("write error:", reply.Err)
+				}
 			}
 			Stat.File.Flush.WaitReply.AddNow(now)
 			f.flushWaiter.Done()
@@ -159,8 +163,15 @@ func (f *File) writeLoop() {
 		if wantClose {
 			// println("file: remain ops:", bufferOps)
 			// now := time.Now()
+			if bufferOps > 0 {
+				f.flusher.Flush(false)
+			}
 			for bufferOps > 0 {
-				bufferOps -= <-flushReply
+				reply := <-flushReply
+				bufferOps -= reply.N
+				if reply.Err != nil {
+					logex.Error("write error:", reply.Err)
+				}
 			}
 			// println("file wait time:", time.Now().Sub(now).String())
 			break
