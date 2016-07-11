@@ -62,6 +62,7 @@ type GStat struct {
 			WaitSize  ptrace.Ratio
 			WaitReply ptrace.RatioTime
 		}
+		DiskRead ptrace.RatioTime
 	}
 	Cobuffer struct {
 		Trytime            ptrace.Ratio

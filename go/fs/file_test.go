@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/allmad/madq/go/bio"
 	"github.com/chzyer/flow"
-	"github.com/chzyer/madq/go/bio"
 	"github.com/chzyer/test"
 )
 
@@ -136,7 +136,7 @@ func TestFileWrite(t *testing.T) {
 func TestFileRead(t *testing.T) {
 	defer test.New(t)
 
-	f := testNewFile(test.NewMemDisk())
+	f := testNewFile(bio.NewHybrid(test.NewMemDisk(), BlockBit))
 	defer f.Close()
 
 	out := 5

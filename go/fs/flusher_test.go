@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/allmad/madq/go/bio"
 	"github.com/chzyer/flow"
-	"github.com/chzyer/madq/go/bio"
 	"github.com/chzyer/test"
 )
 

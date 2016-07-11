@@ -40,7 +40,7 @@ func (cfg *FSBrowser) FlaglyHandle(f *flow.Flow) error {
 		return err
 	}
 	vol, err := fs.NewVolume(f, &fs.VolumeConfig{
-		Delegate: bio.NewHybrid(fd),
+		Delegate: bio.NewHybrid(fd, fs.BlockBit),
 	})
 	if err != nil {
 		return err

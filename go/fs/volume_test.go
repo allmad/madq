@@ -5,15 +5,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/allmad/madq/go/bio"
 	"github.com/chzyer/flow"
-	"github.com/chzyer/madq/go/bio"
 	"github.com/chzyer/test"
 )
 
 func TestVolume(t *testing.T) {
 	defer test.New(t)
 
-	delegate := bio.NewHybrid(test.NewMemDisk())
+	delegate := bio.NewHybrid(test.NewMemDisk(), BlockBit)
 	vol, err := NewVolume(flow.New(), &VolumeConfig{
 		Delegate:      delegate,
 		FlushInterval: time.Second,

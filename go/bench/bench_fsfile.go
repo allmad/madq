@@ -95,7 +95,6 @@ func (cfg *FsFile) BenchRead(f *flow.Flow, volcfg *fs.VolumeConfig, expect []byt
 	if err != nil {
 		return fmt.Errorf("error in openfile: %v", err)
 	}
-	logex.Info(fd)
 	defer fd.Close()
 
 	buf := make([]byte, len(expect))
@@ -117,7 +116,7 @@ func (cfg *FsFile) FlaglyHandle(f *flow.Flow) error {
 	volcfg := &fs.VolumeConfig{}
 
 	if cfg.Mem {
-		volcfg.Delegate = bio.NewHybrid(test.NewMemDisk())
+		volcfg.Delegate = bio.NewHybrid(test.NewMemDisk(), fs.BlockBit)
 	} else {
 		vs, err := fs.NewVolumeSource(cfg.Dir)
 		if err != nil {
@@ -127,11 +126,15 @@ func (cfg *FsFile) FlaglyHandle(f *flow.Flow) error {
 		volcfg.Delegate = vs
 	}
 
+	f.Add(1)
+	defer f.Done()
+
 	if err := cfg.BenchWrite(f, volcfg, buf); err != nil {
 		return err
 	}
 	fs.ResetStat()
 	if err := cfg.BenchRead(f, volcfg, buf); err != nil {
+		logex.Error(err)
 		return err
 	}
 

@@ -99,6 +99,6 @@ func NewVolumeSource(dir string) (*VolumeSource, error) {
 	return &VolumeSource{
 		flock:  flock,
 		file:   file,
-		Hybrid: bio.NewHybrid(file),
+		Hybrid: bio.NewHybrid(file, BlockBit),
 	}, nil
 }

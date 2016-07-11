@@ -100,29 +100,38 @@ func (f *File) writeLoop() {
 		timer     <-chan time.Time
 
 		flushReply = make(chan *FlusherWriteReply, 100)
-		flushStart = time.Now()
+		flushStart time.Time
 		buffer     []byte
 		bufferOps  int
 	)
 
+	var state int
+	_ = state
+
 	for {
 		select {
 		case <-f.cobuf.IsWritten():
+			state = 1
 			timer = time.NewTimer(f.cfg.FlushInterval).C
 			flushStart = time.Now()
 			continue
 		case <-f.cobuf.IsFlush():
+			state = 2
 		case <-timer:
+			state = 3
 			// println("file: timeout", time.Now().Sub(flushStart).String())
 		case <-f.flushChan:
+			state = 4
 			wantFlush = true
 		case reply := <-flushReply:
+			state = 5
 			bufferOps -= reply.N
 			if reply.Err != nil {
 				logex.Error("write error:", reply.Err)
 			}
 			continue
 		case <-f.flow.IsClose():
+			state = 6
 			// println("want close")
 			wantClose = true
 		}
@@ -218,7 +227,10 @@ getOffset:
 		remainBytes = len(b) - readBytes
 	}
 	readAddr := inode.Offsets[idx] + ShortAddr(off&(BlockSize-1))
+
+	readTime := time.Now()
 	data, err := f.delegate.ReadData(readAddr, remainBytes)
+	Stat.File.DiskRead.AddNow(readTime)
 	if err != nil {
 		return
 	}

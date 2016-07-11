@@ -3,7 +3,7 @@ package fs
 import (
 	"testing"
 
-	"github.com/chzyer/madq/go/bio"
+	"github.com/allmad/madq/go/bio"
 	"github.com/chzyer/test"
 )
 

@@ -78,6 +78,7 @@ func NewVolume(f *flow.Flow, cfg *VolumeConfig) (*Volume, error) {
 	if err := vol.init(); err != nil {
 		return nil, err
 	}
+
 	return vol, nil
 }
 
