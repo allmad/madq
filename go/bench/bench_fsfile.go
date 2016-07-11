@@ -10,6 +10,7 @@ import (
 	"github.com/allmad/madq/go/fs"
 	"github.com/allmad/madq/go/ptrace"
 	"github.com/chzyer/flow"
+	"github.com/chzyer/logex"
 	"github.com/chzyer/test"
 )
 
@@ -18,6 +19,8 @@ type FsFile struct {
 	Mem       bool
 	BenchCnt  int    `name:"count" desc:"bench size" default:"200"`
 	BlockSize int    `name:"bs" desc:"block size" default:"200"`
+	Stat      bool   `name:"stat"`
+	RStat     bool   `name:"rstat"`
 	Dir       string `desc:"test directory path" default:"/tmp/madq/bench/fsfile"`
 }
 
@@ -25,7 +28,8 @@ func (f *FsFile) FlaglyDesc() string {
 	return "benchmark file Read/Write"
 }
 
-func (cfg *FsFile) FlaglyHandle(f *flow.Flow) error {
+func (cfg *FsFile) BenchWrite(f *flow.Flow, volcfg *fs.VolumeConfig, buf []byte) error {
+	f = f.Fork(0)
 	defer f.Close()
 
 	if cfg.Trace {
@@ -40,9 +44,75 @@ func (cfg *FsFile) FlaglyHandle(f *flow.Flow) error {
 	defer func() {
 		duration := time.Now().Sub(now)
 
-		println(fs.Stat.String())
-		println(size.Rate(duration).String())
+		if cfg.Stat {
+			println(fs.Stat.String())
+		}
+		println("write performance:", size.Rate(duration).String())
 	}()
+
+	vol, err := fs.NewVolume(f, volcfg)
+	if err != nil {
+		return err
+	}
+	defer vol.Close()
+
+	fd, err := vol.Open("/hello", os.O_CREATE)
+	if err != nil {
+		return fmt.Errorf("error in openfile: %v", err)
+	}
+	defer fd.Close()
+
+	for i := 0; i < cfg.BenchCnt; i++ {
+		fd.Write(buf)
+	}
+	fd.Sync()
+	return nil
+}
+
+func (cfg *FsFile) BenchRead(f *flow.Flow, volcfg *fs.VolumeConfig, expect []byte) error {
+	f = f.Fork(0)
+	defer f.Close()
+
+	now := time.Now()
+	var size ptrace.Size
+	size.AddInt(cfg.BlockSize * cfg.BenchCnt)
+	defer func() {
+		duration := time.Now().Sub(now)
+
+		if cfg.RStat {
+			println(fs.Stat.String())
+		}
+		println("read performance:", size.Rate(duration).String())
+	}()
+
+	vol, err := fs.NewVolume(f, volcfg)
+	if err != nil {
+		return err
+	}
+	defer vol.Close()
+
+	fd, err := vol.Open("/hello", 0)
+	if err != nil {
+		return fmt.Errorf("error in openfile: %v", err)
+	}
+	logex.Info(fd)
+	defer fd.Close()
+
+	buf := make([]byte, len(expect))
+	for i := 0; i < cfg.BenchCnt; i++ {
+		_, err := fd.Read(buf)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (cfg *FsFile) FlaglyHandle(f *flow.Flow) error {
+	defer f.Close()
+
+	buf := make([]byte, cfg.BlockSize)
+	rand.Read(buf)
 
 	volcfg := &fs.VolumeConfig{}
 
@@ -57,24 +127,13 @@ func (cfg *FsFile) FlaglyHandle(f *flow.Flow) error {
 		volcfg.Delegate = vs
 	}
 
-	vol, err := fs.NewVolume(f, volcfg)
-	if err != nil {
+	if err := cfg.BenchWrite(f, volcfg, buf); err != nil {
 		return err
 	}
-	defer vol.Close()
-
-	fd, err := vol.Open("/hello", os.O_CREATE)
-	if err != nil {
-		return fmt.Errorf("error in openfile: %v", err)
+	fs.ResetStat()
+	if err := cfg.BenchRead(f, volcfg, buf); err != nil {
+		return err
 	}
-	defer fd.Close()
 
-	buf := make([]byte, cfg.BlockSize)
-	rand.Read(buf)
-
-	for i := 0; i < cfg.BenchCnt; i++ {
-		fd.Write(buf)
-	}
-	fd.Sync()
 	return nil
 }

@@ -8,6 +8,10 @@ import (
 
 var Stat GStat
 
+func ResetStat() {
+	Stat = GStat{}
+}
+
 type GStat struct {
 	Volume struct {
 		CloseTime ptrace.RatioTime
