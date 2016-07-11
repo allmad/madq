@@ -225,6 +225,8 @@ getOffset:
 	remainBytes := inode.GetRemainInBlock(off)
 	if remainBytes < len(b)-readBytes {
 		remainBytes = len(b) - readBytes
+	} else {
+		remainBytes = len(b)
 	}
 	readAddr := inode.Offsets[idx] + ShortAddr(off&(BlockSize-1))
 
