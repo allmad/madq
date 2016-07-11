@@ -3,11 +3,11 @@ package main
 import (
 	"runtime"
 
+	"github.com/allmad/madq/go/bench"
+	"github.com/allmad/madq/go/debug"
 	"github.com/chzyer/flagly"
 	"github.com/chzyer/flow"
 	"github.com/chzyer/logex"
-	"github.com/chzyer/madq/go/bench"
-	"github.com/chzyer/madq/go/debug"
 )
 
 type Madq struct {

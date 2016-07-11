@@ -4,9 +4,9 @@ import (
 	"crypto/rand"
 	"time"
 
+	"github.com/allmad/madq/go/bio"
+	"github.com/allmad/madq/go/ptrace"
 	"github.com/chzyer/flow"
-	"github.com/chzyer/madq/go/bio"
-	"github.com/chzyer/madq/go/ptrace"
 )
 
 type RawDisk struct {

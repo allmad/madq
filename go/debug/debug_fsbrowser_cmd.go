@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/allmad/madq/go/fs"
+	"github.com/allmad/madq/go/ptrace"
 	"github.com/chzyer/flagly"
-	"github.com/chzyer/madq/go/fs"
-	"github.com/chzyer/madq/go/ptrace"
 )
 
 type FSBrowserCmd struct {

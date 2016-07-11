@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/allmad/madq/go/bio"
+	"github.com/allmad/madq/go/common"
+	"github.com/allmad/madq/go/fs"
 	"github.com/chzyer/flagly"
 	"github.com/chzyer/flow"
-	"github.com/chzyer/madq/go/bio"
-	"github.com/chzyer/madq/go/common"
-	"github.com/chzyer/madq/go/fs"
 	"github.com/chzyer/readline"
 )
 

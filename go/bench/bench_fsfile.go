@@ -6,10 +6,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/allmad/madq/go/bio"
+	"github.com/allmad/madq/go/fs"
+	"github.com/allmad/madq/go/ptrace"
 	"github.com/chzyer/flow"
-	"github.com/chzyer/madq/go/bio"
-	"github.com/chzyer/madq/go/fs"
-	"github.com/chzyer/madq/go/ptrace"
 	"github.com/chzyer/test"
 )
 

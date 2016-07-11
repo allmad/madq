@@ -3,8 +3,8 @@ package fs
 import (
 	"fmt"
 
-	"github.com/chzyer/madq/go/bio"
-	"github.com/chzyer/madq/go/common"
+	"github.com/allmad/madq/go/bio"
+	"github.com/allmad/madq/go/common"
 )
 
 const (

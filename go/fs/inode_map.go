@@ -5,8 +5,8 @@ import (
 	"io"
 	"sync"
 
+	"github.com/allmad/madq/go/bio"
 	"github.com/chzyer/logex"
-	"github.com/chzyer/madq/go/bio"
 )
 
 const (

@@ -3,7 +3,7 @@ package fs
 import (
 	"encoding/json"
 
-	"github.com/chzyer/madq/go/ptrace"
+	"github.com/allmad/madq/go/ptrace"
 )
 
 var Stat GStat

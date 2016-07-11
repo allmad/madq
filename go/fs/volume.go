@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/allmad/madq/go/bio"
 	"github.com/chzyer/flow"
 	"github.com/chzyer/logex"
-	"github.com/chzyer/madq/go/bio"
 )
 
 var ErrFileNotExist = logex.Define("file is not exists")
